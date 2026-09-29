@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
+    QMessageBox,
     QPushButton,
     QSlider,
     QSystemTrayIcon,
@@ -26,9 +27,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import autostart
+from . import __version__, autostart
 from .config import INTERVAL_CHOICES, Config, asset_dir
-from .price import METALS, Snapshot
+from .price import METALS, Snapshot, is_market_open
 
 # 每种状态的帧数与播放间隔（毫秒）
 STATES = {
@@ -80,6 +81,11 @@ LINES = {
     ],
     "loading": ["正在打听金价…", "稍等一下下~"],
     "offline": ["连不上网了，先看上次的价吧", "网络开小差了…"],
+    "welcome": [
+        "你好呀，我是金娘～点一下可以摸我的头",
+        "右键菜单里能换品种、改设置、让我说话",
+        "想让我安静一点就去设置里调刷新间隔哦",
+    ],
     "pat": ["摸摸头~金娘很乖的", "呀…被摸头了，好开心", "再摸一下下好不好~"],
     "shy": ["讨厌啦，别一直盯着人家看", "金娘…金娘才没有撒娇呢", "再摸就要闹脾气了哦~"],
     "high": ["创新高啦！要不要看看金条？", "今天涨得好厉害呀~"],
@@ -179,6 +185,8 @@ class PetWindow(QWidget):
         self._long_pressed = False
         self._last_extreme_at = 0.0
         self._last_extreme_side = ""
+        self._last_target_at = 0.0
+        self._last_target_side = ""
         self._fail_streak = 0
         self._retry_timer = QTimer(self)
         self._retry_timer.setSingleShot(True)
@@ -361,7 +369,12 @@ class PetWindow(QWidget):
         arrow = "▲" if change > 0 else "▼" if change < 0 else "—"
         sign = "+" if change > 0 else ""
         updated = time.strftime("%H:%M:%S", time.localtime(snap.updated_at))
-        offline_tip = "" if snap.ok else ' <span style="color:#ffd666">离线</span>'
+        tips = []
+        if not snap.ok:
+            tips.append('<span style="color:#ffd666">离线</span>')
+        if not is_market_open():
+            tips.append('<span style="color:#9aa0a6">休市</span>')
+        offline_tip = " " + " · ".join(tips) if tips else ""
         range_html = ""
         if quote.high > 0 and quote.low > 0:
             range_html = (
@@ -375,7 +388,7 @@ class PetWindow(QWidget):
             f"{range_html}"
             f'<div style="font-size:11px;color:#aaaaaa">更新 {updated}{offline_tip}</div>'
         )
-        self._update_spark(quote, color)
+        self._update_spark(quote, color, append=snap.ok and not silent)
 
         tray = self.tray_icon()
         if tray is not None:
@@ -386,15 +399,48 @@ class PetWindow(QWidget):
         if not silent and snap.ok:
             self._maybe_alert(pct)
             self._maybe_extreme(quote)
+            self._maybe_target(quote)
 
-    def _update_spark(self, quote, color: str) -> None:
+    def _update_spark(self, quote, color: str, append: bool = False) -> None:
+        """更新迷你走势图；append=True 才落盘（只在联网刷新成功时写，减少磁盘写入）。"""
         if self.history is None or not self.cfg.get("show_spark", True):
             self.spark.setVisible(False)
             return
         self.spark.setVisible(True)
-        series = self.history.append(self.metal, self.unit, quote.price)
+        if append:
+            series = self.history.append(self.metal, self.unit, quote.price)
+        else:
+            series = self.history.series(self.metal, self.unit)
         values = [p.get("p", 0.0) for p in series][-60:]
         self.spark.set_series(values, color)
+
+    def _maybe_target(self, quote) -> None:
+        """到价提醒：以元/克为基准（与当前显示单位无关）。"""
+        high = float(self.cfg.get("target_high", 0.0))
+        low = float(self.cfg.get("target_low", 0.0))
+        if high <= 0 and low <= 0:
+            return
+        base = quote if quote.unit.startswith("元") else None
+        if base is None and self.snapshot is not None:
+            base = self.snapshot.price_of(self.metal, "cny_g")
+        if base is None:
+            return
+        now = time.time()
+        cooldown = self._cooldown_sec()
+        if high > 0 and base.price >= high:
+            side, text = "high", f"金价已涨到 {base.price:.2f} 元/克（目标 {high:.2f}）"
+        elif low > 0 and base.price <= low:
+            side, text = "low", f"金价已跌到 {base.price:.2f} 元/克（目标 {low:.2f}）"
+        else:
+            return
+        if now - self._last_target_at < cooldown and side == self._last_target_side:
+            return
+        self._last_target_at = now
+        self._last_target_side = side
+        self.speak("high" if side == "high" else "low")
+        tray = self.tray_icon()
+        if tray is not None:
+            tray.showMessage("黄金桌宠 · 到价提醒", text, QSystemTrayIcon.Information, 8000)
 
     def _cooldown_sec(self) -> int:
         return int(self.cfg.get("alert_cooldown_sec", 600))
@@ -679,6 +725,19 @@ class SettingsDialog(QDialog):
         self.cooldown_spin.setSuffix(" 分钟")
         self.cooldown_spin.setValue(int(cfg.get("alert_cooldown_sec", 600)) // 60)
 
+        # 到价提醒（以元/克为基准，0 = 关闭）
+        self.target_high_spin = QDoubleSpinBox()
+        self.target_high_spin.setRange(0.0, 100000.0)
+        self.target_high_spin.setDecimals(2)
+        self.target_high_spin.setSuffix(" 元/克")
+        self.target_high_spin.setValue(float(cfg.get("target_high", 0.0)))
+
+        self.target_low_spin = QDoubleSpinBox()
+        self.target_low_spin.setRange(0.0, 100000.0)
+        self.target_low_spin.setDecimals(2)
+        self.target_low_spin.setSuffix(" 元/克")
+        self.target_low_spin.setValue(float(cfg.get("target_low", 0.0)))
+
         self.opacity_slider = QSlider(Qt.Horizontal)
         self.opacity_slider.setRange(30, 100)
         self.opacity_slider.setValue(int(float(cfg.get("opacity", 1.0)) * 100))
@@ -701,6 +760,8 @@ class SettingsDialog(QDialog):
         form.addRow("刷新间隔", self.interval_combo)
         form.addRow("涨跌提醒阈值", self.alert_spin)
         form.addRow("同类提醒冷却", self.cooldown_spin)
+        form.addRow("到价提醒 ≥（0 关闭）", self.target_high_spin)
+        form.addRow("到价提醒 ≤（0 关闭）", self.target_low_spin)
         form.addRow("不透明度", self.opacity_slider)
         form.addRow("", self.top_check)
         form.addRow("", self.bubble_check)
@@ -726,6 +787,8 @@ class SettingsDialog(QDialog):
         self.cfg.set("interval_sec", int(self.interval_combo.currentData()))
         self.cfg.set("alert_pct", float(self.alert_spin.value()))
         self.cfg.set("alert_cooldown_sec", int(self.cooldown_spin.value()) * 60)
+        self.cfg.set("target_high", float(self.target_high_spin.value()))
+        self.cfg.set("target_low", float(self.target_low_spin.value()))
         self.cfg.set("opacity", self.opacity_slider.value() / 100.0)
         self.cfg.set("always_on_top", self.top_check.isChecked())
         self.cfg.set("show_bubble", self.bubble_check.isChecked())
@@ -746,18 +809,32 @@ def build_tray(window: PetWindow, cfg: Config) -> QSystemTrayIcon | None:
     tray = QSystemTrayIcon(icon, window)
     tray.setToolTip("黄金桌宠")
 
-    menu = QMenu()
-    menu.addAction("显示/隐藏", lambda: window.setVisible(not window.isVisible()))
-    menu.addAction("立即刷新", window.refresh)
-    menu.addAction("切换单位", window.toggle_unit)
-    menu.addAction("切换品种", window.toggle_metal)
-    menu.addAction("摸摸头", window.pat)
-    menu.addAction("让金娘说句话", lambda: window.speak())
-    menu.addSeparator()
-    menu.addAction("设置…", window.open_settings)
-    menu.addSeparator()
-    menu.addAction("退出", window.quit_app)
+def build_tray(window: PetWindow, cfg: Config) -> QSystemTrayIcon | None:
+    """创建系统托盘图标与菜单；托盘不可用时返回 None（调用方需降级）。"""
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        logging.getLogger("gold_pet").warning("系统托盘不可用，已降级为“关窗即退出”")
+        return None
+    icon_path = asset_dir() / "icon.png"
+    icon = QIcon(str(icon_path)) if icon_path.exists() else QIcon()
+    tray = QSystemTrayIcon(icon, window)
+    tray.setToolTip("黄金桌宠")
+
+    menu = build_menu(window)
+    show_act = menu.addAction("显示/隐藏")
+    show_act.triggered.connect(lambda: window.setVisible(not window.isVisible()))
+    menu.removeAction(show_act)
+    menu.insertAction(menu.actions()[0], show_act)
+    menu.insertSeparator(menu.actions()[1])
+
     tray.setContextMenu(menu)
+    tray.activated.connect(
+        lambda reason: window.setVisible(not window.isVisible())
+        if reason == QSystemTrayIcon.Trigger
+        else None
+    )
+    window.attach_tray(tray)
+    tray.show()
+    return tray
     tray.activated.connect(
         lambda reason: window.setVisible(not window.isVisible())
         if reason == QSystemTrayIcon.Trigger

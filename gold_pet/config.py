@@ -19,6 +19,8 @@ DEFAULTS: dict = {
     "interval_sec": 60,         # 刷新间隔（秒）
     "alert_pct": 0.5,           # 涨跌幅提醒阈值（%）
     "alert_cooldown_sec": 600,  # 同类提醒冷却时间（秒）
+    "target_high": 0.0,         # 到价提醒：金价 ≥ 该值（元/克）时提醒，0 = 关闭
+    "target_low": 0.0,          # 到价提醒：金价 ≤ 该值（元/克）时提醒，0 = 关闭
     "always_on_top": True,      # 窗口置顶
     "opacity": 1.0,             # 不透明度 0.3 ~ 1.0
     "show_bubble": True,        # 是否显示价格气泡
@@ -105,6 +107,13 @@ class Config:
         pos = d.get("pos")
         if not (isinstance(pos, list) and len(pos) == 2 and all(isinstance(v, int) for v in pos)):
             d["pos"] = None
+
+        for key in ("target_high", "target_low"):
+            try:
+                value = float(d.get(key))
+            except (TypeError, ValueError):
+                value = 0.0
+            d[key] = value if value > 0 else 0.0
 
         for key in ("always_on_top", "show_bubble", "show_spark", "autostart"):
             d[key] = bool(d.get(key, DEFAULTS[key]))

@@ -76,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
     log = logging.getLogger("gold_pet")
     log.info("黄金桌宠 %s 启动", __version__)
 
+    data_dir = app_dir()
+    first_run = not (data_dir / "settings.json").exists()
     cfg = Config.load()
     if args.metal:
         cfg.set("metal", args.metal)
@@ -113,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
     window = PetWindow(cfg, service, history)
     build_tray(window, cfg)
     window.show()
+    if first_run:
+        window.welcome()  # 首次运行：说句话 + 托盘气泡引导
     log.info("界面已启动")
     return app.exec()
 

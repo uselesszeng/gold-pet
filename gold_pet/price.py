@@ -209,6 +209,25 @@ def parse_snapshot(raw: Dict[str, list]) -> Snapshot:
     )
 
 
+def is_market_open(now: time.struct_time | None = None) -> bool:
+    """Au(T+D) / 上海金交所是否在交易时段（按本机本地时间判断，默认东八区）。
+
+    日盘：09:00-11:30、13:30-15:30；夜盘：20:00-次日 02:30；周一至周五开盘。
+    注意：若用户时区不是东八区判断会有偏差，这里只用于气泡上的「休市」提示。
+    """
+    now = now or time.localtime()
+    if now.tm_wday >= 5:  # 周六、周日休市
+        return False
+    minutes = now.tm_hour * 60 + now.tm_min
+    day = ((9 * 60, 11 * 60 + 30), (13 * 60 + 30, 15 * 60 + 30))
+    night = (20 * 60, 26 * 60 + 30)  # 次日 02:30 记成 26:30
+    for start, end in day:
+        if start <= minutes <= end:
+            return True
+    # 夜盘跨零点：当夜 20:00 以后，或次日 02:30 以前
+    return night[0] <= minutes <= night[1] or minutes <= 2 * 60 + 30
+
+
 class PriceService:
     """行情服务：抓取 + 本地缓存（断网时回显上次价格）。"""
 

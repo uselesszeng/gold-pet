@@ -92,6 +92,32 @@ def test_offline_state(app, tmp_path):
     assert w.state == "offline"
 
 
+def test_target_alert_triggers(app, tmp_path):
+    from types import SimpleNamespace
+
+    cfg = Config()
+    cfg.set("target_low", 900.0)  # 现价 897.15 应触发
+    w = _window(app, tmp_path, cfg=cfg)
+    w._render(parse_snapshot(RAW), silent=True)  # silent 不触发，下面手动调用
+    w._last_target_at = 0.0
+    quote = w.snapshot.price_of("gold", "cny_g")
+    w._maybe_target(quote)
+    assert w._last_target_side == "low"
+
+    # 冷却期内不重复提醒
+    before = w._last_target_side
+    w._maybe_target(quote)
+    assert w._last_target_side == before
+
+
+def test_market_status_tag_in_bubble(app, tmp_path, monkeypatch):
+    import gold_pet.ui as ui_mod
+
+    monkeypatch.setattr(ui_mod, "is_market_open", lambda *a, **k: False)
+    w = _window(app, tmp_path, cfg=Config())
+    w._render(parse_snapshot(RAW), silent=True)
+    assert "休市" in w.bubble.text()
+
 def test_failure_backoff_schedules_retry(app, tmp_path):
     w = _window(app, tmp_path)
     w._on_snapshot(parse_snapshot({}))

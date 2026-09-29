@@ -23,7 +23,7 @@ from .ui import PetWindow, build_tray
 
 
 def setup_logging(level: str = "INFO") -> None:
-    """日志同时写控制台和文件（%APPDATA%\GoldPet\gold-pet.log）。"""
+    r"""日志同时写控制台和文件（%APPDATA%\GoldPet\gold-pet.log）。"""
     log_dir = app_dir()
     handler = logging.handlers.RotatingFileHandler(
         log_dir / "gold-pet.log", maxBytes=256 * 1024, backupCount=2, encoding="utf-8"

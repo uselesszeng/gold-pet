@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import random
 import time
 
@@ -148,7 +149,7 @@ class SparkLine(QWidget):
 class PetWindow(QWidget):
     """桌宠主窗口：透明置顶、可拖动、头顶挂价格气泡。"""
 
-    def __init__(self, cfg: Config, service, history=None):
+    def __init__(self, cfg: Config, service, history=None, auto_refresh: bool = True):
         super().__init__()
         self.cfg = cfg
         self.service = service
@@ -176,6 +177,10 @@ class PetWindow(QWidget):
         self._long_pressed = False
         self._last_extreme_at = 0.0
         self._last_extreme_side = ""
+        self._fail_streak = 0
+        self._retry_timer = QTimer(self)
+        self._retry_timer.setSingleShot(True)
+        self._retry_timer.timeout.connect(self.refresh)
 
         self._load_frames()
         self._build_ui()
@@ -193,7 +198,8 @@ class PetWindow(QWidget):
         self.snapshot = self.service.load_cache()
         if self.snapshot and self.snapshot.ok:
             self._render(self.snapshot, silent=True)
-        self.refresh()
+        if auto_refresh:
+            self.refresh()
 
     # ------------------------------------------------------------------ 构建
     def _load_frames(self) -> None:
@@ -287,12 +293,27 @@ class PetWindow(QWidget):
         worker = getattr(self, "_worker", None)
         if worker is not None and worker.isRunning():
             return
+        if self._retry_timer.isActive():
+            self._retry_timer.stop()
         self._set_state("loading")
         self._worker = PriceWorker(self.service, self)
         self._worker.finished.connect(self._on_snapshot)
         self._worker.start()
 
     def _on_snapshot(self, snap: Snapshot) -> None:
+        if not snap.ok:
+            # 失败则指数退避重试：15s → 30s → 60s … 上限 300s
+            self._fail_streak += 1
+            delay = min(int(self.cfg.get("interval_sec", 60)) * 2 ** (self._fail_streak - 1), 300)
+            delay = max(delay, 15)
+            logging.getLogger("gold_pet").warning(
+                "行情获取失败（第 %d 次）：%s，%ds 后重试",
+                self._fail_streak, snap.error, delay,
+            )
+            self._retry_timer.start(delay * 1000)
+        elif self._fail_streak:
+            self._fail_streak = 0
+            self._apply_interval()
         self._render(snap)
 
     def _render(self, snap: Snapshot, silent: bool = False) -> None:

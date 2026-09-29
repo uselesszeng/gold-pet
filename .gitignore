@@ -3,4 +3,6 @@ __pycache__/
 build/
 dist/
 *.spec
+!gold-pet.spec
 .venv/
+.pytest_cache/

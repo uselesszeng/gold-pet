@@ -101,3 +101,33 @@ flutter pub get && flutter run
 ## 仓库
 
 - CNB：https://cnb.cool/TJ-coding/gold-pet
+
+## 测试
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests -q
+```
+
+覆盖：行情解析（三个品种、单位换算、缩放）、缓存与损坏兜底、历史去重与上限、
+配置读写与素材完整性、UI 渲染 / 单位与品种切换 / 摸头撒娇 / 台词恢复 / 离线状态 / 失败退避。
+
+## 调试与日志
+
+```bash
+python run.py --once                 # 只打印一次行情，不启动界面
+python run.py --metal silver --once  # 指定品种
+python run.py --log-level DEBUG      # 调试日志
+打包后：dist\黄金桌宠.exe --once
+```
+
+日志：`%APPDATA%\GoldPet\gold-pet.log`（滚动保留 2 份）；未捕获异常也会写入日志而不是弹窗崩溃。
+
+## 打包
+
+```bat
+build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
+:: 产物：dist\黄金桌宠.exe（约 60-80MB，onefile、无控制台）
+:: 精简：spec 里排除了 QtQml/QtWebEngine/Qt3D/QtMultimedia 等未使用模块
+:: 资源：assets 整个目录随包打入，运行时从临时目录读取
+```

@@ -28,6 +28,9 @@ DEFAULTS: dict = {
 
 INTERVAL_CHOICES = [15, 30, 60, 300, 900]
 
+METAL_NAMES = {"gold": "黄金", "silver": "白银", "platinum": "铂金"}
+UNIT_NAMES = {"cny_g": "元/克", "usd_oz": "美元/盎司"}
+
 
 def app_dir() -> Path:
     """返回配置目录（不存在则创建）。"""

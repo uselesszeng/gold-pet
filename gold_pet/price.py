@@ -17,7 +17,6 @@ import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
 
 SINA_URL = "https://hq.sinajs.cn/list=gds_AUTD,hf_XAU,gds_AGTD,hf_XAG,hf_XPT,fx_susdcny"
 HEADERS = {
@@ -32,7 +31,7 @@ OZ_TO_GRAM = 31.1034768
 CODE_FX = "fx_susdcny"
 
 # 品种 -> 单位 -> (接口代码, 缩放系数)；cny_g 缺失时自动用美元价换算
-METALS: Dict[str, dict] = {
+METALS: dict[str, dict] = {
     "gold": {
         "name": "黄金",
         "sources": {"cny_g": ("gds_AUTD", 1.0), "usd_oz": ("hf_XAU", 1.0)},
@@ -85,7 +84,7 @@ class Quote:
         return {k: getattr(self, k) for k in self.__annotations__}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Quote":
+    def from_dict(cls, data: dict) -> Quote:
         return cls(**{k: v for k, v in data.items() if k in cls.__annotations__})
 
 
@@ -93,13 +92,13 @@ class Quote:
 class Snapshot:
     """一次抓取结果。"""
 
-    quotes: Dict[str, Quote] = field(default_factory=dict)
+    quotes: dict[str, Quote] = field(default_factory=dict)
     fx: float = 0.0
     updated_at: float = field(default_factory=time.time)
     ok: bool = False
     error: str = ""
 
-    def price_of(self, metal: str = "gold", unit: str = "cny_g") -> Optional[Quote]:
+    def price_of(self, metal: str = "gold", unit: str = "cny_g") -> Quote | None:
         q = self.quotes.get(key(metal, unit))
         if q is not None:
             return q
@@ -144,7 +143,7 @@ class Snapshot:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Snapshot":
+    def from_dict(cls, data: dict) -> Snapshot:
         return cls(
             quotes={k: Quote.from_dict(v) for k, v in (data.get("quotes") or {}).items()},
             fx=data.get("fx", 0.0),
@@ -168,15 +167,15 @@ def _s(values: list, idx: int, default: str = "") -> str:
         return default
 
 
-def fetch_raw(timeout: float = 8.0) -> Dict[str, list]:
+def fetch_raw(timeout: float = 8.0) -> dict[str, list]:
     req = urllib.request.Request(SINA_URL, headers=HEADERS)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         text = resp.read().decode("gbk", errors="ignore")
     return {code: payload.split(",") for code, payload in _PATTERN.findall(text)}
 
 
-def parse_snapshot(raw: Dict[str, list]) -> Snapshot:
-    quotes: Dict[str, Quote] = {}
+def parse_snapshot(raw: dict[str, list]) -> Snapshot:
+    quotes: dict[str, Quote] = {}
     for metal, cfg in METALS.items():
         for unit, (code, scale) in cfg["sources"].items():
             fields = raw.get(code) or []
@@ -252,7 +251,7 @@ class PriceService:
         except OSError:
             pass
 
-    def load_cache(self) -> Optional[Snapshot]:
+    def load_cache(self) -> Snapshot | None:
         try:
             return Snapshot.from_dict(json.loads(self.cache_path.read_text(encoding="utf-8")))
         except (OSError, ValueError, KeyError, TypeError):
@@ -267,14 +266,14 @@ class HistoryStore:
         self.max_points = max_points
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def load(self) -> Dict[str, List[dict]]:
+    def load(self) -> dict[str, list[dict]]:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             return data if isinstance(data, dict) else {}
         except (OSError, ValueError):
             return {}
 
-    def append(self, metal: str, unit: str, price: float) -> List[dict]:
+    def append(self, metal: str, unit: str, price: float) -> list[dict]:
         data = self.load()
         series = data.get(key(metal, unit), [])
         now = time.time()
@@ -291,5 +290,5 @@ class HistoryStore:
             pass
         return series
 
-    def series(self, metal: str, unit: str) -> List[dict]:
+    def series(self, metal: str, unit: str) -> list[dict]:
         return self.load().get(key(metal, unit), [])

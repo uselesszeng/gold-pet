@@ -18,7 +18,7 @@ import traceback
 
 from . import __version__
 from .config import METAL_NAMES, Config, app_dir, asset_dir
-from .price import PriceService, HistoryStore
+from .price import HistoryStore, PriceService
 from .ui import PetWindow, build_tray
 
 

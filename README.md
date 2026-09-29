@@ -157,3 +157,18 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
 - [代码评审 Hy4-gold-pet-v0.3.0](docs/review/Hy4-gold-pet-v0.3.0-代码评审文档.md)
 - [产品优化方案 Hy4-gold-pet-v0.4.0](docs/product/Hy4-gold-pet-v0.4.0-产品优化方案文档.md)
 - [架构优化方案 Hy4-gold-pet-v0.4.0](docs/architecture/Hy4-gold-pet-v0.4.0-架构优化文档.md)
+
+## 开发规范
+
+```bash
+pip install -r requirements-dev.txt
+
+python -m ruff check .     # 静态检查
+python -m ruff format .    # 格式化
+python -m mypy             # 类型检查（纯逻辑模块）
+python -m pytest tests --cov=gold_pet --cov-report=term-missing
+
+# Windows 一键：lint.bat
+```
+
+CI（.cnb.yml）在 push / PR 时自动跑：lint → 类型检查 → 测试 + 覆盖率。

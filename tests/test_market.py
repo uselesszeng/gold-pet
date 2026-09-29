@@ -14,15 +14,15 @@ def _at(hour: int, minute: int, wday: int = 1) -> time.struct_time:
 
 
 def test_market_open_sessions():
-    assert is_market_open(_at(10, 0))      # 日盘
-    assert is_market_open(_at(14, 0))      # 日盘下午
-    assert is_market_open(_at(21, 0))      # 夜盘
-    assert is_market_open(_at(1, 0))       # 夜盘次日凌晨
+    assert is_market_open(_at(10, 0))  # 日盘
+    assert is_market_open(_at(14, 0))  # 日盘下午
+    assert is_market_open(_at(21, 0))  # 夜盘
+    assert is_market_open(_at(1, 0))  # 夜盘次日凌晨
 
 
 def test_market_closed():
     assert not is_market_open(_at(12, 0))  # 午休
     assert not is_market_open(_at(16, 0))  # 收盘后
-    assert not is_market_open(_at(8, 0))   # 开盘前
+    assert not is_market_open(_at(8, 0))  # 开盘前
     assert not is_market_open(_at(10, 0, wday=5))  # 周六
     assert not is_market_open(_at(10, 0, wday=6))  # 周日

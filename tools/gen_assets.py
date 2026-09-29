@@ -15,8 +15,8 @@ OUT_DIR = Path(__file__).resolve().parent.parent / "assets"
 PET_DIR = OUT_DIR / "pet"
 
 # ---- 配色 ----
-HAIR = (247, 215, 116)        # 金发主色
-HAIR_SHADE = (214, 165, 60)   # 金发暗部
+HAIR = (247, 215, 116)  # 金发主色
+HAIR_SHADE = (214, 165, 60)  # 金发暗部
 HAIR_LIGHT = (255, 244, 198)  # 金发高光
 SKIN = (255, 227, 200)
 SKIN_SHADE = (240, 197, 165)
@@ -235,8 +235,7 @@ def make_frame(state: str, idx: int) -> Image.Image:
 
 def main() -> None:
     PET_DIR.mkdir(parents=True, exist_ok=True)
-    plan = {"idle": 4, "up": 2, "down": 2, "pat": 2, "shy": 3,
-            "loading": 2, "offline": 1}
+    plan = {"idle": 4, "up": 2, "down": 2, "pat": 2, "shy": 3, "loading": 2, "offline": 1}
     for state, count in plan.items():
         for i in range(count):
             make_frame(state, i).save(PET_DIR / f"{state}_{i}.png")

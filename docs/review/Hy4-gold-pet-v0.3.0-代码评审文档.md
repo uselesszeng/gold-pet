@@ -64,7 +64,8 @@ def _move_to_default(self) -> None:
 
 ```python
 class PriceWorker(QThread):
-    snapshot_ready = Signal(object)   # 不要用 finished，避免覆盖 QThread.finished
+    snapshot_ready = Signal(object)  # 不要用 finished，避免覆盖 QThread.finished
+
     def run(self):
         self.snapshot_ready.emit(self.service.fetch())
 ```

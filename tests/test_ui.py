@@ -21,9 +21,15 @@ from gold_pet.price import HistoryStore, PriceService, parse_snapshot  # noqa: E
 from gold_pet.ui import LINES, STATES, PetWindow  # noqa: E402
 
 RAW = {
-    "gds_AUTD": "897.15,0,896.03,897.25,902.00,889.24,15:29:54,900.37,897.00,45270,2,7,2026-09-29,黄金延期".split(","),
-    "hf_XAU": "4138.36,4114.93,4138.36,4138.71,4148.85,4113.30,16:37:00,4114.93,4117.01,0,0,0,2026-09-29,伦敦金".split(","),
-    "fx_susdcny": "16:37:00,6.7038,6.7042,6.7118,61,6.7094,6.7094,6.7033,6.7042,x,-0.11,0,0,y,0,0,,2026-09-29".split(","),
+    "gds_AUTD": "897.15,0,896.03,897.25,902.00,889.24,15:29:54,900.37,897.00,45270,2,7,2026-09-29,黄金延期".split(
+        ","
+    ),
+    "hf_XAU": "4138.36,4114.93,4138.36,4138.71,4148.85,4113.30,16:37:00,4114.93,4117.01,0,0,0,2026-09-29,伦敦金".split(
+        ","
+    ),
+    "fx_susdcny": "16:37:00,6.7038,6.7042,6.7118,61,6.7094,6.7094,6.7033,6.7042,x,-0.11,0,0,y,0,0,,2026-09-29".split(
+        ","
+    ),
 }
 
 
@@ -93,7 +99,6 @@ def test_offline_state(app, tmp_path):
 
 
 def test_target_alert_triggers(app, tmp_path):
-    from types import SimpleNamespace
 
     cfg = Config()
     cfg.set("target_low", 900.0)  # 现价 897.15 应触发
@@ -117,6 +122,7 @@ def test_market_status_tag_in_bubble(app, tmp_path, monkeypatch):
     w = _window(app, tmp_path, cfg=Config())
     w._render(parse_snapshot(RAW), silent=True)
     assert "休市" in w.bubble.text()
+
 
 def test_failure_backoff_schedules_retry(app, tmp_path):
     w = _window(app, tmp_path)

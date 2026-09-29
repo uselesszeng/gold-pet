@@ -110,3 +110,35 @@ app/
 3. 历史写入只在联网成功时进行（I/O 与渲染解耦第一步）
 4. 休市判断放进数据层 is_market_open()，UI 只负责展示
 5. 测试 24 → 28 条（新增 market 与到价提醒）
+
+---
+
+## 七、阶段 1 落地记录（A5 / A7 / A9）
+
+| 项 | 落地内容 |
+|---|---|
+| A7 抽 paths | 新增 gold_pet/paths.py：app_dir / asset_dir / settings_path / cache_path / history_path / log_path / lock_path，支持 PyInstaller _MEIPASS；config 不再关心路径 |
+| A5 气泡模板化 | 新增 gold_pet/bubble.py（纯函数、无 Qt）：render_price_html / render_line_html / render_cache_html / change_color / change_arrow，样式集中；ui.py 里 60 行 HTML 拼接被移除 |
+| A9 工程化 | 新增 pyproject.toml（ruff + mypy + pytest）、lint.bat、requirements-dev.txt；CI 增加 lint / 类型检查 / 覆盖率三步 |
+| 顺带修复 | 托盘与右键菜单真正统一为 build_menu()（此前托盘分支残留重复代码）、气泡 tips 在无时间戳时被丢弃、updated_at=0 被当作空值 |
+
+### 质量门禁现状
+
+```
+ruff check .        -> All checks passed
+ruff format --check -> 全部已格式化
+mypy                -> Success（4 个纯逻辑模块）
+pytest --cov        -> 33 passed，总覆盖率 52%
+```
+
+| 模块 | 覆盖率 |
+|---|---|
+| bubble.py | 100% |
+| config.py | 97% |
+| price.py | 87% |
+| paths.py | 76% |
+| ui.py | 43% |
+| autostart.py | 22% |
+| main.py | 0% |
+
+下一门禁目标：总覆盖率 60%（优先补 autostart / main 的 CLI 路径）。

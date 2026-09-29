@@ -1,6 +1,6 @@
 $:
   push:
-    - name: test
+    - name: quality
       docker:
         image: python:3.12-slim
       stages:
@@ -11,11 +11,17 @@ $:
         - name: install deps
           script: |
             pip install -q --break-system-packages -r requirements.txt -r requirements-dev.txt
-        - name: pytest
-          script: python -m pytest tests -q
+        - name: lint
+          script: |
+            python -m ruff check .
+            python -m ruff format --check .
+        - name: type check
+          script: python -m mypy
+        - name: test
+          script: python -m pytest tests --cov=gold_pet --cov-report=term-missing
 
   pull_request:
-    - name: test
+    - name: quality
       docker:
         image: python:3.12-slim
       stages:
@@ -26,5 +32,11 @@ $:
         - name: install deps
           script: |
             pip install -q --break-system-packages -r requirements.txt -r requirements-dev.txt
-        - name: pytest
-          script: python -m pytest tests -q
+        - name: lint
+          script: |
+            python -m ruff check .
+            python -m ruff format --check .
+        - name: type check
+          script: python -m mypy
+        - name: test
+          script: python -m pytest tests --cov=gold_pet --cov-report=term-missing

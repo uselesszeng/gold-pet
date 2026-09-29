@@ -86,6 +86,16 @@ def test_names_mapping():
 def test_assets_exist():
     pet = asset_dir() / "pet"
     assert (asset_dir() / "icon.png").exists()
-    for name in ("idle_0", "idle_1", "idle_2", "idle_3", "up_0", "down_0",
-                 "pat_0", "shy_0", "loading_0", "offline_0"):
+    for name in (
+        "idle_0",
+        "idle_1",
+        "idle_2",
+        "idle_3",
+        "up_0",
+        "down_0",
+        "pat_0",
+        "shy_0",
+        "loading_0",
+        "offline_0",
+    ):
         assert (pet / f"{name}.png").exists(), name

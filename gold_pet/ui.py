@@ -14,21 +14,31 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
-    QSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QMenu,
-    QMessageBox,
     QPushButton,
     QSlider,
+    QSpinBox,
     QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
 
-from . import __version__, autostart
-from .config import INTERVAL_CHOICES, Config, asset_dir
+from . import autostart
+from .bubble import (
+    ALERT_STYLE,
+    BUBBLE_STYLE,
+    FLAT_COLOR,
+    change_arrow,
+    change_color,
+    render_cache_html,
+    render_line_html,
+    render_price_html,
+)
+from .config import INTERVAL_CHOICES, Config
+from .paths import asset_dir
 from .price import METALS, Snapshot, is_market_open
 
 # 每种状态的帧数与播放间隔（毫秒）
@@ -41,27 +51,6 @@ STATES = {
     "loading": (2, 400),
     "offline": (1, 1000),
 }
-UP_COLOR = "#ff4d4f"    # 涨：红（国内习惯）
-DOWN_COLOR = "#16c784"  # 跌：绿
-FLAT_COLOR = "#8c8c8c"
-
-BUBBLE_STYLE = (
-    "background-color: rgba(28, 28, 32, 210);"
-    "color: #f5f5f5;"
-    "border: 1px solid rgba(255, 215, 120, 160);"
-    "border-radius: 10px;"
-    "padding: 6px 10px;"
-    "font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;"
-)
-ALERT_STYLE = (
-    "background-color: rgba(120, 30, 30, 225);"
-    "color: #fff;"
-    "border: 1px solid #ffd978;"
-    "border-radius: 10px;"
-    "padding: 6px 10px;"
-    "font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;"
-)
-
 # 互动台词
 LINES = {
     "up": [
@@ -328,7 +317,9 @@ class PetWindow(QWidget):
             delay = max(delay, 15)
             logging.getLogger("gold_pet").warning(
                 "行情获取失败（第 %d 次）：%s，%ds 后重试",
-                self._fail_streak, snap.error, delay,
+                self._fail_streak,
+                snap.error,
+                delay,
             )
             self._retry_timer.start(delay * 1000)
         elif self._fail_streak:
@@ -346,10 +337,7 @@ class PetWindow(QWidget):
             cache = self.service.load_cache()
             q = cache.price_of(self.metal, self.unit) if cache else None
             if q is not None:
-                self.bubble.setText(
-                    f"{metal_name} {q.format_price()} {q.unit}<br>"
-                    f'<span style="color:{FLAT_COLOR}">离线 · 缓存</span>'
-                )
+                self.bubble.setText(render_cache_html(metal_name, q))
             else:
                 self.bubble.setText("行情获取失败")
             return
@@ -365,36 +353,26 @@ class PetWindow(QWidget):
         else:
             self._set_state("idle")
 
-        color = UP_COLOR if change > 0 else DOWN_COLOR if change < 0 else FLAT_COLOR
-        arrow = "▲" if change > 0 else "▼" if change < 0 else "—"
-        sign = "+" if change > 0 else ""
-        updated = time.strftime("%H:%M:%S", time.localtime(snap.updated_at))
-        tips = []
+        # 状态标记：离线 / 休市
+        tips: list[str] = []
         if not snap.ok:
             tips.append('<span style="color:#ffd666">离线</span>')
-        if not is_market_open():
-            tips.append('<span style="color:#9aa0a6">休市</span>')
-        offline_tip = " " + " · ".join(tips) if tips else ""
-        range_html = ""
-        if quote.high > 0 and quote.low > 0:
-            range_html = (
-                f'<div style="font-size:11px;color:#bbbbbb">'
-                f"高 {quote.high:.2f} · 低 {quote.low:.2f}</div>"
-            )
         self.bubble.setText(
-            f'<div style="font-size:13px">{metal_name} {quote.format_price()} {quote.unit}</div>'
-            f'<div style="font-size:12px;color:{color}">'
-            f"{arrow} {sign}{change:.2f} ({sign}{pct:.2f}%)</div>"
-            f"{range_html}"
-            f'<div style="font-size:11px;color:#aaaaaa">更新 {updated}{offline_tip}</div>'
+            render_price_html(
+                metal_name,
+                quote,
+                updated_at=snap.updated_at,
+                tips=tips,
+                is_market_open=is_market_open(),
+            )
         )
-        self._update_spark(quote, color, append=snap.ok and not silent)
+        self._update_spark(quote, change_color(change), append=snap.ok and not silent)
 
         tray = self.tray_icon()
         if tray is not None:
             tray.setToolTip(
                 f"黄金桌宠 {metal_name} {quote.format_price()} {quote.unit} "
-                f"{arrow}{sign}{change:.2f}"
+                f"{change_arrow(change)}{change:+.2f}"
             )
         if not silent and snap.ok:
             self._maybe_alert(pct)
@@ -505,9 +483,7 @@ class PetWindow(QWidget):
         mood = mood or self.state if self.state in LINES else "idle"
         if mood not in LINES:
             mood = "idle"
-        self.bubble.setText(
-            f'<div style="font-size:12px;color:#ffd978">{random.choice(LINES[mood])}</div>'
-        )
+        self.bubble.setText(render_line_html(random.choice(LINES[mood])))
         self._speak_timer.start(4000)
 
     def _restore_price(self) -> None:
@@ -799,20 +775,46 @@ class SettingsDialog(QDialog):
         super().accept()
 
 
-def build_tray(window: PetWindow, cfg: Config) -> QSystemTrayIcon | None:
-    """创建系统托盘图标与菜单；托盘不可用时返回 None（调用方需降级）。"""
-    if not QSystemTrayIcon.isSystemTrayAvailable():
-        logging.getLogger("gold_pet").warning("系统托盘不可用，已降级为“关窗即退出”")
-        return None
-    icon_path = asset_dir() / "icon.png"
-    icon = QIcon(str(icon_path)) if icon_path.exists() else QIcon()
-    tray = QSystemTrayIcon(icon, window)
-    tray.setToolTip("黄金桌宠")
+def build_menu(window: PetWindow) -> QMenu:
+    """统一的菜单构建：右键菜单与托盘菜单共用。"""
+    menu = QMenu(window)
+    menu.addAction("立即刷新", window.refresh)
+    menu.addAction("切换单位", window.toggle_unit)
+    menu.addAction("切换品种（当前：" + METALS[window.metal]["name"] + "）", window.toggle_metal)
+    menu.addSeparator()
+    menu.addAction("摸摸头", window.pat)
+    menu.addAction("撒娇一下", window.shy)
+    menu.addAction("让金娘说句话", lambda: window.speak())
+    menu.addSeparator()
+
+    act_top = menu.addAction("窗口置顶")
+    act_top.setCheckable(True)
+    act_top.setChecked(bool(window.cfg.get("always_on_top", True)))
+    act_top.triggered.connect(window._toggle_top)
+
+    act_bubble = menu.addAction("显示价格气泡")
+    act_bubble.setCheckable(True)
+    act_bubble.setChecked(bool(window.cfg.get("show_bubble", True)))
+    act_bubble.triggered.connect(window._toggle_bubble)
+
+    act_spark = menu.addAction("显示迷你走势图")
+    act_spark.setCheckable(True)
+    act_spark.setChecked(bool(window.cfg.get("show_spark", True)))
+    act_spark.triggered.connect(window._toggle_spark)
+
+    menu.addSeparator()
+    menu.addAction("设置…", window.open_settings)
+    menu.addAction("关于…", window.open_about)
+    if window.tray_icon() is not None:
+        menu.addAction("隐藏到托盘", window.hide)
+    menu.addAction("退出", window.quit_app)
+    return menu
+
 
 def build_tray(window: PetWindow, cfg: Config) -> QSystemTrayIcon | None:
     """创建系统托盘图标与菜单；托盘不可用时返回 None（调用方需降级）。"""
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        logging.getLogger("gold_pet").warning("系统托盘不可用，已降级为“关窗即退出”")
+        logging.getLogger("gold_pet").warning("系统托盘不可用，已降级为关窗即退出")
         return None
     icon_path = asset_dir() / "icon.png"
     icon = QIcon(str(icon_path)) if icon_path.exists() else QIcon()
@@ -828,17 +830,9 @@ def build_tray(window: PetWindow, cfg: Config) -> QSystemTrayIcon | None:
 
     tray.setContextMenu(menu)
     tray.activated.connect(
-        lambda reason: window.setVisible(not window.isVisible())
-        if reason == QSystemTrayIcon.Trigger
-        else None
-    )
-    window.attach_tray(tray)
-    tray.show()
-    return tray
-    tray.activated.connect(
-        lambda reason: window.setVisible(not window.isVisible())
-        if reason == QSystemTrayIcon.Trigger
-        else None
+        lambda reason: (
+            window.setVisible(not window.isVisible()) if reason == QSystemTrayIcon.Trigger else None
+        )
     )
     window.attach_tray(tray)
     tray.show()

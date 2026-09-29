@@ -6,7 +6,7 @@ import logging
 import random
 import time
 
-from PySide6.QtCore import QPointF, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QPoint, QPointF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
+    QSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -89,14 +90,15 @@ LINES = {
 class PriceWorker(QThread):
     """后台抓行情，避免网络阻塞界面。"""
 
-    finished = Signal(object)
+    # 注意：不要叫 finished，会覆盖 QThread 内置信号
+    snapshot_ready = Signal(object)
 
     def __init__(self, service, parent=None):
         super().__init__(parent)
         self.service = service
 
     def run(self):  # noqa: D102 - QThread 入口
-        self.finished.emit(self.service.fetch())
+        self.snapshot_ready.emit(self.service.fetch())
 
 
 class SparkLine(QWidget):
@@ -251,11 +253,15 @@ class PetWindow(QWidget):
         self.spark.setVisible(bool(self.cfg.get("show_spark", True)))
 
     def _move_to_default(self) -> None:
+        """恢复上次位置；若已不在任何屏幕内（换显示器/改分辨率），回落到主屏右下角。"""
         pos = self.cfg.get("pos")
+        if isinstance(pos, list) and len(pos) == 2:
+            point = QPoint(int(pos[0]), int(pos[1]))
+            for screen in QApplication.screens():
+                if screen.availableGeometry().contains(point):
+                    self.move(point)
+                    return
         screen = QApplication.primaryScreen()
-        if pos and isinstance(pos, list) and len(pos) == 2:
-            self.move(int(pos[0]), int(pos[1]))
-            return
         if screen is None:
             return
         geo = screen.availableGeometry()
@@ -291,13 +297,19 @@ class PetWindow(QWidget):
     # ------------------------------------------------------------------ 数据
     def refresh(self) -> None:
         worker = getattr(self, "_worker", None)
-        if worker is not None and worker.isRunning():
-            return
+        if worker is not None:
+            if worker.isRunning():
+                return
+            # 断开旧 worker，避免旧数据回调
+            try:
+                worker.snapshot_ready.disconnect(self._on_snapshot)
+            except (RuntimeError, TypeError):
+                pass
         if self._retry_timer.isActive():
             self._retry_timer.stop()
         self._set_state("loading")
         self._worker = PriceWorker(self.service, self)
-        self._worker.finished.connect(self._on_snapshot)
+        self._worker.snapshot_ready.connect(self._on_snapshot)
         self._worker.start()
 
     def _on_snapshot(self, snap: Snapshot) -> None:
@@ -384,13 +396,17 @@ class PetWindow(QWidget):
         values = [p.get("p", 0.0) for p in series][-60:]
         self.spark.set_series(values, color)
 
+    def _cooldown_sec(self) -> int:
+        return int(self.cfg.get("alert_cooldown_sec", 600))
+
     def _maybe_alert(self, pct: float) -> None:
         threshold = float(self.cfg.get("alert_pct", 0.5))
         if threshold <= 0 or abs(pct) < threshold:
             return
         now = time.time()
         side = "up" if pct > 0 else "down"
-        if now - self._last_alert_at < 600 and side == self._last_alert_side:
+        cooldown = self._cooldown_sec()
+        if now - self._last_alert_at < cooldown and side == self._last_alert_side:
             return
         self._last_alert_at = now
         self._last_alert_side = side
@@ -420,7 +436,8 @@ class PetWindow(QWidget):
         else:
             return
         now = time.time()
-        if now - self._last_extreme_at < 600 and side == self._last_extreme_side:
+        cooldown = self._cooldown_sec()
+        if now - self._last_extreme_at < cooldown and side == self._last_extreme_side:
             return
         self._last_extreme_at = now
         self._last_extreme_side = side
@@ -562,8 +579,10 @@ class PetWindow(QWidget):
         act_spark.triggered.connect(self._toggle_spark)
 
         menu.addSeparator()
+        menu.addSeparator()
         menu.addAction("设置…", self.open_settings)
-        menu.addAction("隐藏到托盘", self.hide)
+        if self.tray_icon() is not None:
+            menu.addAction("隐藏到托盘", self.hide)
         menu.addAction("退出", self.quit_app)
         menu.exec(event.globalPos())
 
@@ -608,8 +627,15 @@ class PetWindow(QWidget):
         QApplication.quit()
 
     def closeEvent(self, event):  # noqa: N802
-        event.ignore()
-        self.hide()
+        # 有托盘：关窗=藏起来；没托盘：关窗=退出，避免再也唤不回来
+        if self.tray_icon() is not None:
+            event.ignore()
+            self.hide()
+        else:
+            self.cfg.set("pos", [self.x(), self.y()])
+            self.cfg.save()
+            event.accept()
+            QApplication.quit()
 
 
 class SettingsDialog(QDialog):
@@ -647,6 +673,12 @@ class SettingsDialog(QDialog):
         self.alert_spin.setSuffix(" %")
         self.alert_spin.setValue(float(cfg.get("alert_pct", 0.5)))
 
+        self.cooldown_spin = QSpinBox()
+        self.cooldown_spin.setRange(1, 120)
+        self.cooldown_spin.setSingleStep(1)
+        self.cooldown_spin.setSuffix(" 分钟")
+        self.cooldown_spin.setValue(int(cfg.get("alert_cooldown_sec", 600)) // 60)
+
         self.opacity_slider = QSlider(Qt.Horizontal)
         self.opacity_slider.setRange(30, 100)
         self.opacity_slider.setValue(int(float(cfg.get("opacity", 1.0)) * 100))
@@ -668,6 +700,7 @@ class SettingsDialog(QDialog):
         form.addRow("默认单位", self.unit_combo)
         form.addRow("刷新间隔", self.interval_combo)
         form.addRow("涨跌提醒阈值", self.alert_spin)
+        form.addRow("同类提醒冷却", self.cooldown_spin)
         form.addRow("不透明度", self.opacity_slider)
         form.addRow("", self.top_check)
         form.addRow("", self.bubble_check)
@@ -692,6 +725,7 @@ class SettingsDialog(QDialog):
         self.cfg.set("unit", self.unit_combo.currentData())
         self.cfg.set("interval_sec", int(self.interval_combo.currentData()))
         self.cfg.set("alert_pct", float(self.alert_spin.value()))
+        self.cfg.set("alert_cooldown_sec", int(self.cooldown_spin.value()) * 60)
         self.cfg.set("opacity", self.opacity_slider.value() / 100.0)
         self.cfg.set("always_on_top", self.top_check.isChecked())
         self.cfg.set("show_bubble", self.bubble_check.isChecked())
@@ -702,8 +736,11 @@ class SettingsDialog(QDialog):
         super().accept()
 
 
-def build_tray(window: PetWindow, cfg: Config) -> QSystemTrayIcon:
-    """创建系统托盘图标与菜单。"""
+def build_tray(window: PetWindow, cfg: Config) -> QSystemTrayIcon | None:
+    """创建系统托盘图标与菜单；托盘不可用时返回 None（调用方需降级）。"""
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        logging.getLogger("gold_pet").warning("系统托盘不可用，已降级为“关窗即退出”")
+        return None
     icon_path = asset_dir() / "icon.png"
     icon = QIcon(str(icon_path)) if icon_path.exists() else QIcon()
     tray = QSystemTrayIcon(icon, window)

@@ -85,8 +85,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.once:
         return run_once(args, cfg)
 
+    from PySide6.QtCore import QLockFile
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
+
+    # 单实例保护：已经有一个金娘在跑就直接退出（业界通用做法：文件锁）
+    lock = QLockFile(str(app_dir() / ".gold-pet.lock"))
+    lock.setStaleLockTime(30 * 1000)
+    if not lock.tryLock(100):
+        log.warning("黄金桌宠已在运行，本次启动退出（可在托盘里找到它）")
+        print("黄金桌宠已经在运行了，去托盘里找找看～")
+        return 0
 
     app = QApplication(sys.argv[:1])
     app.setQuitOnLastWindowClosed(False)

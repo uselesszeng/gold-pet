@@ -11,9 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest  # noqa: E402
 
-QtWidgets = pytest.importorskip("PySide6.QtWidgets")
-
-from PySide6.QtWidgets import QApplication  # noqa: E402
+try:
+    from PySide6.QtWidgets import QApplication  # noqa: E402
+except Exception as exc:  # 无显示环境 / 缺系统库时跳过 UI 测试
+    pytest.skip(f"PySide6 不可用：{exc}", allow_module_level=True)
 
 from gold_pet.config import Config  # noqa: E402
 from gold_pet.price import HistoryStore, PriceService, parse_snapshot  # noqa: E402

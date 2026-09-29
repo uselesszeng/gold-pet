@@ -52,6 +52,32 @@ def test_save_and_reload(tmp_path):
     assert again.get("alert_pct") == 1.5
 
 
+def test_config_sanitize_bad_values(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps(
+            {
+                "interval_sec": "abc",
+                "opacity": 99,
+                "metal": "xxx",
+                "unit": "bad",
+                "pos": [1],
+                "alert_pct": 500,
+                "alert_cooldown_sec": -5,
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg = Config.load(path)
+    assert cfg.get("interval_sec") == 60
+    assert cfg.get("opacity") == 1.0
+    assert cfg.get("metal") == "gold"
+    assert cfg.get("unit") == "cny_g"
+    assert cfg.get("pos") is None
+    assert cfg.get("alert_pct") == 20.0
+    assert 60 <= cfg.get("alert_cooldown_sec") <= 7200
+
+
 def test_names_mapping():
     assert METAL_NAMES["gold"] == "黄金"
     assert UNIT_NAMES["usd_oz"] == "美元/盎司"

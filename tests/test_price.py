@@ -110,6 +110,15 @@ def test_history_dedupe_and_cap(tmp_path):
     assert len(store.series("gold", "cny_g")) == 5  # 上限生效
 
 
+def test_converted_quote_keeps_high_low():
+    snap = parse_snapshot(RAW)
+    q = snap.price_of("platinum", "cny_g")
+    base = snap.quotes[key("platinum", "usd_oz")]
+    assert q is not None
+    assert q.high > 0 and q.low > 0
+    assert abs(q.high - base.high / 31.1034768 * snap.fx) < 1e-6
+
+
 def test_metals_config_shape():
     for metal, meta in METALS.items():
         assert "name" in meta and meta["sources"]

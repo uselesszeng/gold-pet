@@ -148,3 +148,33 @@ class PriceWorker(QThread):
 
 - Windows exe 无法在 Linux 交叉编译，打包结论来自同一份 spec 的 Linux 等价构建，请在 Windows 上执行 build.bat 并双击 dist 目录下的黄金桌宠.exe 做最终确认。
 - Flutter / 鸿蒙端本次只做静态走查，未编译运行。
+
+---
+
+## 六、修复记录（评审后按业界通行做法落地）
+
+| # | 问题 | 状态 | 做法 |
+|---|---|---|---|
+| 1 | 版本号不一致 | 已修 | __version__ = 0.3.0 |
+| 3 | Worker 信号覆盖 Qt 内置 | 已修 | finished 改为 snapshot_ready，重建 Worker 前 disconnect |
+| 4 | 缺 LICENSE | 已修 | 新增 MIT（2026 176code），与主流小型开源桌面应用一致 |
+| 5 | 无单实例保护 | 已修 | QLockFile（配置目录 .gold-pet.lock，30s 陈旧锁），二次启动提示并退出 |
+| 6 | 配置无校验 | 已修 | Config.sanitize()：interval 取白名单、opacity 夹 0.3~1.0、metal/unit 白名单、pos 校验、冷却夹取 |
+| 7 | 换算丢最高/最低 | 已修 | price_of 换算分支补齐 high / low |
+| 8 | 冷却时间硬编码 | 已修 | 新增 alert_cooldown_sec（默认 600），设置面板可调（分钟） |
+| 9 | 托盘不可用时无降级 | 已修 | isSystemTrayAvailable() 为假则不建托盘、不显示“隐藏到托盘”、关窗即退出 |
+| 11 | 无 CI | 已修 | 新增 .cnb.yml：push / PR 均跑 pytest tests -q |
+| 12 | docstring 转义告警 | 已修 | 改 raw string |
+| 14 | 旧 Worker 连接未断 | 已修 | 同 #3 |
+| 2 | 位置无屏幕边界校验 | 待真机验证 | 已实现多屏可视区判断（需你在 Windows 上换分辨率实测） |
+| 10 | 体积 68MB | 暂缓 | 后续可试 UPX 或 Nuitka |
+| 13/15/16/17 | 写入频率 / 测试覆盖 / Flutter / 菜单复用 | 暂缓 | 优化项，不影响发布 |
+
+### 修复后验证
+
+```
+python -m pytest tests -q                      -> 24 passed（新增 2 条：配置校验、换算高低价）
+python run.py（第二个实例）                     -> 提示“已经在运行了”，退出
+pyinstaller --noconfirm --clean gold-pet.spec   -> 构建成功
+./dist/黄金桌宠 --once                          -> 正常输出行情，版本号 0.3.0
+```

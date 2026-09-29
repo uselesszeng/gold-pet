@@ -131,3 +131,14 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
 :: 精简：spec 里排除了 QtQml/QtWebEngine/Qt3D/QtMultimedia 等未使用模块
 :: 资源：assets 整个目录随包打入，运行时从临时目录读取
 ```
+
+## 开源许可
+
+[MIT](LICENSE) —— 与主流小型开源桌面应用一致，可自由使用、修改、二次分发，保留版权声明即可。
+
+## 常见问题
+
+- **桌宠不见了**：换显示器/改分辨率后可能落在屏幕外，程序会自动回落到主屏右下角；
+  若仍找不到，删除 %APPDATA%\GoldPet\settings.json 里的 pos 后重启。
+- **重复启动**：只会有一个金娘，第二次启动会提示“已经在运行了”。
+- **没有托盘**：部分环境禁用托盘，此时关窗即退出，菜单里不会出现“隐藏到托盘”。

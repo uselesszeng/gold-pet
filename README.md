@@ -85,3 +85,19 @@ gold-pet/
 | 换数据源 | `gold_pet/price.py` 的 `SINA_URL` 与 `parse_snapshot` |
 
 配置文件在 `%APPDATA%\GoldPet\settings.json`，可以直接手改后重启。
+
+## 移动端（Flutter）
+
+`mobile/flutter/` 是 Android / 移动端的骨架，数据层与 Windows 版同一套接口与换算：
+
+```bash
+cd mobile/flutter
+flutter create --org com.tjcoding --project-name gold_pet --platforms=android,windows .
+flutter pub get && flutter run
+```
+
+详见 [mobile/flutter/README.md](mobile/flutter/README.md)。
+
+## 仓库
+
+- CNB：https://cnb.cool/TJ-coding/gold-pet

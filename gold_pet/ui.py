@@ -16,11 +16,13 @@ from PySide6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QMenu,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSpinBox,
     QSystemTrayIcon,
@@ -264,7 +266,12 @@ class PetWindow(QWidget):
         self.spark.setVisible(bool(self.cfg.get("show_spark", True)))
 
     def _move_to_default(self) -> None:
-        """恢复上次位置；若已不在任何屏幕内（换显示器/改分辨率），回落到主屏右下角。"""
+        """恢复上次位置；若已不在任何屏幕内（换显示器/改分辨率），回落到主屏右下角。
+
+        注意：本方法在 __init__ 里布局尚未定型，self.width()/height() 可能还是旧值。
+        因此未命中历史位置时，用 QTimer.singleShot(0) 推迟到事件循环首帧，
+        等 adjustSize 生效后再定位，否则会算错边距、把窗口顶到屏幕边缘。
+        """
         pos = self.cfg.get("pos")
         if isinstance(pos, list) and len(pos) == 2:
             point = QPoint(int(pos[0]), int(pos[1]))
@@ -272,11 +279,21 @@ class PetWindow(QWidget):
                 if screen.availableGeometry().contains(point):
                     self.move(point)
                     return
-        screen = QApplication.primaryScreen()
+        QTimer.singleShot(0, self._snap_to_corner)
+
+    def _snap_to_corner(self, margin: int = 24) -> None:
+        """把窗口摆到主屏右下角，留出 margin 边距，并夹取在可视区内。"""
+        screen = self.screen() or QApplication.primaryScreen()
         if screen is None:
             return
         geo = screen.availableGeometry()
-        self.move(geo.right() - self.width() - 24, geo.bottom() - self.height() - 24)
+        width = max(self.width(), self.sizeHint().width())
+        height = max(self.height(), self.sizeHint().height())
+        x = geo.right() - width - margin
+        y = geo.bottom() - height - margin
+        x = max(geo.left(), min(x, geo.right() - width))
+        y = max(geo.top(), min(y, geo.bottom() - height))
+        self.move(x, y)
 
     def _apply_interval(self) -> None:
         self.refresh_timer.start(int(self.cfg.get("interval_sec", 60)) * 1000)
@@ -654,6 +671,9 @@ class SettingsDialog(QDialog):
         self.cfg = cfg
         self.setWindowTitle("黄金桌宠 · 设置")
         self.setModal(True)
+        # 限制宽度，避免表单被拉成满屏（QFormLayout 会按最长行撑开窗口）
+        self.setMinimumWidth(380)
+        self.setMaximumWidth(520)
 
         self.metal_combo = QComboBox()
         for mid, meta in METALS.items():
@@ -783,15 +803,57 @@ class SettingsDialog(QDialog):
         buttons.addWidget(cancel)
         buttons.addWidget(ok)
 
+        # v0.5：设置项变多，内容放进滚动区，避免窗口被撑满屏幕
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 8, 0)
+        content_layout.addWidget(_section_label("基本"))
+        content_layout.addLayout(form)
+        content_layout.addWidget(_section_label("提醒中心"))
+        content_layout.addLayout(alert_form)
+        content_layout.addWidget(_section_label("勿扰模式"))
+        content_layout.addLayout(dnd_form)
+        content_layout.addStretch(1)
+
+        scroll = QScrollArea()
+        scroll.setWidget(content)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         layout = QVBoxLayout(self)
-        layout.addWidget(_section_label("基本"))
-        layout.addLayout(form)
-        layout.addWidget(_section_label("提醒中心"))
-        layout.addLayout(alert_form)
-        layout.addWidget(_section_label("勿扰模式"))
-        layout.addLayout(dnd_form)
+        layout.addWidget(scroll, 1)
         layout.addSpacing(4)
         layout.addLayout(buttons)
+
+        # 定好尺寸后再居中到父窗口/主屏，避免出现在屏幕外或贴边
+        self.resize(430, 620)
+        self._center_on_parent(parent)
+
+    def _center_on_parent(self, parent) -> None:
+        """把对话框摆到父窗口（或主屏）中央；父窗口可能在屏幕边缘，需夹取到可视区内。"""
+        screen = None
+        if parent is not None:
+            screen = parent.screen()
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        geo = screen.availableGeometry()
+        width = min(self.width(), geo.width())
+        height = min(self.height(), geo.height())
+        self.resize(width, height)
+
+        if parent is not None and parent.isVisible():
+            anchor = parent.frameGeometry()
+        else:
+            anchor = geo
+        x = anchor.center().x() - width // 2
+        y = anchor.center().y() - height // 2
+        # 夹取到屏幕可视范围内，保证标题栏与按钮都点得到
+        x = max(geo.left(), min(x, geo.right() - width))
+        y = max(geo.top(), min(y, geo.bottom() - height))
+        self.move(x, y)
 
     def accept(self):  # noqa: D102
         self.cfg.set("metal", self.metal_combo.currentData())

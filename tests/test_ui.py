@@ -228,6 +228,71 @@ def test_settings_dialog_has_new_controls(app, tmp_path):
         assert hasattr(dlg, attr), attr
 
 
+def test_settings_dialog_has_bounded_size(app, tmp_path):
+    """回归：设置面板曾被 QFormLayout 撑成满屏（实测 1920x1152）。
+
+    现限制宽度并放进滚动区，尺寸应保持紧凑。
+    """
+    from gold_pet.ui import SettingsDialog
+
+    dlg = SettingsDialog(Config(), None)
+    dlg.show()
+    app.processEvents()
+    assert dlg.width() <= 560, f"设置面板过宽：{dlg.width()}"
+    assert dlg.height() <= 900, f"设置面板过高：{dlg.height()}"
+
+    screen = app.primaryScreen().availableGeometry()
+    assert dlg.width() < screen.width() * 0.6, "设置面板不应接近满屏宽度"
+
+
+def test_settings_dialog_is_scrollable(app, tmp_path):
+    """设置项变多后必须有滚动区，否则小屏放不下底部按钮。"""
+    from PySide6.QtWidgets import QScrollArea
+
+    from gold_pet.ui import SettingsDialog
+
+    dlg = SettingsDialog(Config(), None)
+    scroll = dlg.findChild(QScrollArea)
+    assert scroll is not None, "设置面板缺少滚动区"
+    assert scroll.widgetResizable() is True
+
+
+def test_settings_dialog_stays_on_screen(app, tmp_path):
+    """回归：对话框应夹取在屏幕可视区内，标题栏与按钮都要点得到。"""
+    from gold_pet.ui import SettingsDialog
+
+    cfg = Config()
+    dlg = SettingsDialog(cfg, None)
+    dlg.show()
+    app.processEvents()
+    screen = app.primaryScreen().availableGeometry()
+    geo = dlg.frameGeometry()
+    assert screen.contains(geo.topLeft()), f"标题栏在屏幕外：{geo.topLeft()}"
+    assert geo.right() <= screen.right() + 1
+    assert geo.bottom() <= screen.bottom() + 1
+
+
+def test_pet_window_snaps_inside_screen_with_margin(app, tmp_path):
+    """回归：pos 为空时窗口应贴右下角但留边距，不得顶到屏幕边缘。
+
+    此前 _move_to_default() 在布局定型前读取 width()/height()，
+    导致算错边距（实测右边距仅 17px）。
+    """
+    cfg = Config()
+    assert cfg.get("pos") is None
+    w = _window(app, tmp_path, cfg=cfg)
+    for _ in range(10):
+        app.processEvents()
+
+    screen = app.primaryScreen().availableGeometry()
+    geo = w.frameGeometry()
+    assert screen.contains(geo.topLeft()), f"窗口左上角在屏幕外：{geo.topLeft()}"
+    assert geo.right() <= screen.right(), "窗口超出右边界"
+    assert geo.left() >= screen.left(), "窗口超出左边界"
+    # 应留出一定边距，而不是紧贴边缘
+    assert screen.right() - geo.right() >= 4, "右边距过小，窗口贴边了"
+
+
 def test_tray_icon_renders_number(app, tmp_path):
     """托盘数字图标应按价格渲染；位数过长时回退。"""
     from gold_pet.tray_icon import render_price_icon, tray_text

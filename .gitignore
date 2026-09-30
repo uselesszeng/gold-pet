@@ -16,3 +16,6 @@ coverage.xml
 # 本地备份
 *.bak
 *.orig
+
+# 调试截图（tools/grab_screen.py 的产物）
+*.bmp

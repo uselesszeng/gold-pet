@@ -50,8 +50,15 @@ from .bubble import (
     render_line_html,
     render_price_html,
 )
-from .config import INTERVAL_CHOICES, SPARK_RANGE_NAMES, Config
-from .notifier import RULE_CONFIG_KEYS, Alert, Notifier, filter_series
+from .care import CARE_KINDS, CareScheduler
+from .config import (
+    ACTIVITY_LEVELS,
+    CARE_INTERVAL_CHOICES,
+    INTERVAL_CHOICES,
+    SPARK_RANGE_NAMES,
+    Config,
+)
+from .notifier import RULE_CONFIG_KEYS, Alert, Notifier, filter_series, in_quiet_hours
 from .paths import alert_history_path, asset_dir
 from .price import METALS, Snapshot, is_market_open
 
@@ -67,34 +74,124 @@ STATES = {
     "loading": (6, 140),
     "offline": (6, 170),
 }
-# 互动台词
+# 互动台词（v0.7 扩充：每组加量减少重复感，并新增关怀提醒三组）
 LINES = {
     "up": [
         "金价涨啦，金娘的王冠更亮了✨",
         "涨！今天的金娘心情超好~",
         "要不要趁现在去逛逛金店？",
+        "红彤彤的，看着就喜庆~",
+        "涨得这么精神，主人也要加油哦",
+        "金娘的小金库又鼓了一点点",
+        "这波涨势，稳中带甜~",
+        "涨啦涨啦！主人快看快看！",
     ],
     "down": [
         "呜…金娘的金币缩水了",
         "别难过，跌下去的都会回来的",
         "跌了也要笑一笑哦~",
+        "黄金嘛，跌一跌才好上车呀",
+        "金娘帮你盯着呢，别担心",
+        "风物长宜放眼量，主人~",
+        "跌的时候最适合喝口热茶",
+        "金子还在，咱们不慌",
     ],
     "idle": [
         "今天也在认真盯盘呢~",
         "要不要喝杯茶再看看？",
         "金娘会一直陪着你的",
+        "行情平平淡淡，主人平平安安",
+        "金娘站在这儿，好像有点困…",
+        "啧，金价怎么还不动呀",
+        "主人在忙什么呀？",
+        "（金娘在数自己的鳞片玩）",
+        "盯盘中…眼睛都不敢眨",
+        "有点想鲸鱼妈妈了…",
     ],
-    "loading": ["正在打听金价…", "稍等一下下~"],
-    "offline": ["连不上网了，先看上次的价吧", "网络开小差了…"],
+    "loading": [
+        "正在打听金价…",
+        "稍等一下下~",
+        "金娘去问问行情~",
+        "马上就好，主人别急",
+        "翻行情小本本中…",
+    ],
+    "offline": [
+        "连不上网了，先看上次的价吧",
+        "网络开小差了…",
+        "断网中，金娘也只能干等",
+        "网线是不是被猫咬了呀？",
+        "等网络回来，金娘马上更新~",
+    ],
     "welcome": [
         "你好呀，我是金娘～点一下可以摸我的头",
         "右键菜单里能换品种、改设置、让我说话",
         "想让我安静一点就去设置里调刷新间隔哦",
+        "金娘入住主人的桌面啦，请多关照~",
+        "我会一直帮你盯着金价的！",
     ],
-    "pat": ["摸摸头~金娘很乖的", "呀…被摸头了，好开心", "再摸一下下好不好~"],
-    "shy": ["讨厌啦，别一直盯着人家看", "金娘…金娘才没有撒娇呢", "再摸就要闹脾气了哦~"],
-    "high": ["创新高啦！要不要看看金条？", "今天涨得好厉害呀~"],
-    "low": ["跌到今天最低了…抱抱", "别慌，金娘陪着你"],
+    "pat": [
+        "摸摸头~金娘很乖的",
+        "呀…被摸头了，好开心",
+        "再摸一下下好不好~",
+        "主人的手好暖和呀",
+        "摸头充电中…电量 +1",
+        "金娘的头发不会掉色的哦",
+        "嘿嘿，最喜欢主人了",
+        "被摸头的金娘干劲满满！",
+    ],
+    "shy": [
+        "讨厌啦，别一直盯着人家看",
+        "金娘…金娘才没有撒娇呢",
+        "再摸就要闹脾气了哦~",
+        "呜，脸都红了啦",
+        "人家会不好意思的嘛…",
+        "盯、盯太久啦……",
+        "主人坏坏，欺负金娘",
+        "（小声）其实再摸一下也可以…",
+    ],
+    "high": [
+        "创新高啦！要不要看看金条？",
+        "今天涨得好厉害呀~",
+        "新高！金娘要转圈圈庆祝！",
+        "哇，今天的金价闪闪发光✨",
+    ],
+    "low": [
+        "跌到今天最低了…抱抱",
+        "别慌，金娘陪着你",
+        "今天最低啦，金价也累了吧",
+        "抱住主人的大腿不撒手…",
+    ],
+    # 关怀提醒（v0.7）：只走气泡，遵守勿扰时段
+    "care_drink": [
+        "主人，该喝水啦💧金娘盯着呢",
+        "喝水时间到！小口小口喝~",
+        "金娘的鱼缸都该换水了，主人也喝口水吧💧",
+        "多喝水，皮肤才会像金娘一样好~",
+        "杯子空了吧？去接点水回来继续忙~",
+        "补水提醒！喝完记得夸夸金娘",
+        "主人主人，喝口水休息一下眼睛嘛",
+        "今日份的水分补给（第 N 次）💧",
+    ],
+    "care_posture": [
+        "坐了好久啦，起来伸个懒腰吧~",
+        "行情不会跑的，主人起来走两步嘛",
+        "金娘陪你站起来扭一扭~",
+        "久坐警告！去阳台站一会儿好不好",
+        "主人，腰要直直的才好看哦",
+        "起来活动一下，金娘看着你的位置等你回来~",
+        "伸懒腰时间到！左边弯弯右边弯弯~",
+        "椅子之外还有大世界，去看看？",
+    ],
+    "care_eye": [
+        "看看窗外最远的地方，休息一下眼睛👀",
+        "20-20-20 法则：看 6 米外的东西 20 秒~",
+        "眼睛干干的话就眨眨眼嘛，金娘教你",
+        "盯屏幕太久了哦，让眼睛放个假",
+        "望望远处，回来金娘给你讲行情~",
+        "护眼时间！眨眼 10 次，开始！",
+        "远处的风景免费，主人快看一眼",
+        "金娘替你盯盘，主人看看绿色养养眼~",
+    ],
 }
 
 
@@ -218,7 +315,13 @@ class PetWindow(QWidget):
 
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self._tick_frame)
-        self.anim_timer.start(STATES[self.state][1])
+        self.anim_timer.start(self._anim_interval(self.state))
+
+        # 关怀提醒（v0.7）：喝水 / 久坐 / 护眼，只走气泡
+        self.care = CareScheduler(self.cfg)
+        self.care_timer = QTimer(self)
+        self.care_timer.timeout.connect(self._care_tick)
+        self.care_timer.start(30 * 1000)  # 每半分钟查一次到点没有
 
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh)
@@ -361,6 +464,18 @@ class PetWindow(QWidget):
         self.refresh_timer.start(int(self.cfg.get("interval_sec", 60)) * 1000)
 
     # ------------------------------------------------------------------ 动画
+    def _anim_interval(self, state: str) -> int:
+        """按「动作活跃度」换算该状态的帧间隔（毫秒）。
+
+        quiet = 安静(×3 慢动) / normal = 标准 / lively = 活泼(×0.7)。
+        """
+        factor = ACTIVITY_LEVELS.get(self.cfg.get("activity_level", "normal"), ("", 1.0))[1]
+        return round(STATES[state][1] * factor)
+
+    def _apply_activity(self) -> None:
+        """活跃度变更后立即重设当前动画节奏。"""
+        self.anim_timer.setInterval(self._anim_interval(self.state))
+
     def _set_state(self, state: str) -> None:
         if state not in self.frames:
             state = "idle"
@@ -368,7 +483,7 @@ class PetWindow(QWidget):
             return
         self.state = state
         self.frame_idx = 0
-        self.anim_timer.setInterval(STATES[state][1])
+        self.anim_timer.setInterval(self._anim_interval(state))
         self.pet.setPixmap(self._current_pixmap())
 
     def _current_pixmap(self) -> QPixmap:
@@ -538,6 +653,26 @@ class PetWindow(QWidget):
         self.bubble.setText(render_line_html(random.choice(LINES[mood])))
         self._speak_timer.start(4000)
 
+    # ------------------------------------------------------- 关怀提醒（v0.7）
+    def _care_tick(self) -> None:
+        """每半分钟查一次：到点的关怀提醒就让金娘说一句。
+
+        勿扰时段内不出声（计时保留，勿扰结束后到点的会立即补上）。
+        同一时刻到期多条时只说优先级最高的一条，其余顺延 90 秒。
+        """
+        dnd = bool(self.cfg.get("dnd_enabled", False)) and in_quiet_hours(
+            self.cfg.get("dnd_start", "23:00"), self.cfg.get("dnd_end", "08:00")
+        )
+        kind = self.care.due(time.time(), dnd_active=dnd)
+        if kind is None:
+            return
+        for other in CARE_KINDS:
+            if other != kind:
+                self.care.defer(other, time.time())
+        self.care.mark(kind, time.time())
+        self.speak(kind)
+        logging.getLogger("gold_pet").info("关怀提醒已播报: %s", kind)
+
     def _restore_price(self) -> None:
         if self.snapshot is not None:
             self._render(self.snapshot, silent=True)
@@ -687,6 +822,8 @@ class PetWindow(QWidget):
             self.unit = self.cfg.get("unit", "cny_g")
             self._apply_window_flags()
             self._apply_interval()
+            self._apply_activity()  # v0.7：活跃度立即生效，不用重启
+            self.care.reset(time.time())  # v0.7：关怀提醒按新配置重排
             self.bubble.setVisible(bool(self.cfg.get("show_bubble", True)))
             if before != {key: self.cfg.get(key) for key in RULE_CONFIG_KEYS}:
                 self.notifier.reset_state()
@@ -897,10 +1034,35 @@ class SettingsDialog(QDialog):
         self.tray_price_check = QCheckBox("托盘图标显示价格数字")
         self.tray_price_check.setChecked(bool(cfg.get("tray_show_price", True)))
 
+        # ---- v0.7 动作活跃度 ----
+        self.activity_combo = QComboBox()
+        for key, (label, _factor) in ACTIVITY_LEVELS.items():
+            self.activity_combo.addItem(label, key)
+        idx_act = self.activity_combo.findData(cfg.get("activity_level", "normal"))
+        self.activity_combo.setCurrentIndex(max(0, idx_act))
+
+        # ---- v0.7 关怀提醒：喝水 / 久坐 / 护眼 ----
+        self.drink_check = QCheckBox("喝水提醒")
+        self.drink_check.setChecked(bool(cfg.get("care_drink_enabled", True)))
+        self.drink_combo = QComboBox()
+        for minutes in CARE_INTERVAL_CHOICES:
+            self.drink_combo.addItem(f"每 {minutes} 分钟", minutes)
+        drink_cur = int(cfg.get("care_drink_interval_min", 60))
+        self.drink_combo.setCurrentIndex(
+            CARE_INTERVAL_CHOICES.index(drink_cur) if drink_cur in CARE_INTERVAL_CHOICES else 2
+        )
+
+        self.posture_check = QCheckBox("久坐提醒（每 90 分钟）")
+        self.posture_check.setChecked(bool(cfg.get("care_posture_enabled", False)))
+
+        self.eye_check = QCheckBox("护眼提醒（每 45 分钟）")
+        self.eye_check.setChecked(bool(cfg.get("care_eye_enabled", False)))
+
         form = QFormLayout()
         form.addRow("关注品种", self.metal_combo)
         form.addRow("默认单位", self.unit_combo)
         form.addRow("刷新间隔", self.interval_combo)
+        form.addRow("动作活跃度", self.activity_combo)
         form.addRow("不透明度", self.opacity_slider)
         form.addRow("", self.top_check)
         form.addRow("", self.bubble_check)
@@ -934,6 +1096,17 @@ class SettingsDialog(QDialog):
         dnd_form.addRow("勿扰开始", self.dnd_start_spin)
         dnd_form.addRow("勿扰结束", self.dnd_end_spin)
 
+        # v0.7 关怀提醒：陪伴类气泡，不走系统通知、不进提醒中心
+        care_form = QFormLayout()
+        care_form.addRow("喝水提醒", self.drink_combo)
+        care_form.addRow("", self.drink_check)
+        care_form.addRow("", self.posture_check)
+        care_form.addRow("", self.eye_check)
+        care_form.addRow("", _hint_label(
+            "到点时金娘会用气泡说一句话（约 4 秒后自动消失），\n"
+            "不弹系统通知、不进提醒中心；勿扰时段内不会出声。"
+        ))
+
         ok = QPushButton("保存")
         cancel = QPushButton("取消")
         ok.clicked.connect(self.accept)
@@ -951,6 +1124,8 @@ class SettingsDialog(QDialog):
         content_layout.addLayout(form)
         content_layout.addWidget(_section_label("提醒中心"))
         content_layout.addLayout(alert_form)
+        content_layout.addWidget(_section_label("关怀提醒"))
+        content_layout.addLayout(care_form)
         content_layout.addWidget(_section_label("勿扰模式"))
         content_layout.addLayout(dnd_form)
         content_layout.addStretch(1)
@@ -1018,6 +1193,12 @@ class SettingsDialog(QDialog):
         self.cfg.set("dnd_end", self.dnd_end_spin.time().toString("HH:mm"))
         self.cfg.set("spark_range", self.spark_range_combo.currentData())
         self.cfg.set("tray_show_price", self.tray_price_check.isChecked())
+        # v0.7 活跃度 + 关怀提醒
+        self.cfg.set("activity_level", self.activity_combo.currentData())
+        self.cfg.set("care_drink_enabled", self.drink_check.isChecked())
+        self.cfg.set("care_drink_interval_min", int(self.drink_combo.currentData()))
+        self.cfg.set("care_posture_enabled", self.posture_check.isChecked())
+        self.cfg.set("care_eye_enabled", self.eye_check.isChecked())
         autostart.set_enabled(self.autostart_check.isChecked())
         # v0.5.4：按勾选状态增删快捷方式（幂等，重复创建会覆盖）
         if self._link_supported:

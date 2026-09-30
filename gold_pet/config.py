@@ -31,6 +31,15 @@ DEFAULTS: dict = {
     "dnd_end": "08:00",
     # 迷你走势图时间范围：1h / today / all
     "spark_range": "1h",
+    # 动作活跃度：quiet = 安静(帧间隔×3) / normal = 标准 / lively = 活泼(×0.7)
+    "activity_level": "normal",
+    # 关怀提醒（v0.7）：只走金娘气泡，不弹系统通知、不进提醒中心
+    "care_drink_enabled": True,  # 喝水提醒（默认开）
+    "care_drink_interval_min": 60,
+    "care_posture_enabled": False,  # 久坐提醒
+    "care_posture_interval_min": 90,
+    "care_eye_enabled": False,  # 护眼提醒
+    "care_eye_interval_min": 45,
     # 托盘图标是否显示价格数字
     "tray_show_price": True,
     "always_on_top": True,  # 窗口置顶
@@ -45,6 +54,16 @@ INTERVAL_CHOICES = [15, 30, 60, 300, 900]
 
 # 走势图时间范围：键 -> 展示名
 SPARK_RANGE_NAMES = {"1h": "1 小时", "today": "今日", "all": "全部"}
+
+# 动作活跃度：键 -> (展示名, 帧间隔系数)
+ACTIVITY_LEVELS = {
+    "quiet": ("😴 安静", 3.0),
+    "normal": ("🙂 标准", 1.0),
+    "lively": ("🤩 活泼", 0.7),
+}
+
+# 关怀提醒间隔可选值（分钟）
+CARE_INTERVAL_CHOICES = [30, 45, 60, 90, 120]
 
 METAL_NAMES = {"gold": "黄金", "silver": "白银", "platinum": "铂金"}
 UNIT_NAMES = {"cny_g": "元/克", "usd_oz": "美元/盎司"}
@@ -144,6 +163,17 @@ class Config:
         # 走势图时间范围：非法值回落默认
         if d.get("spark_range") not in SPARK_RANGE_NAMES:
             d["spark_range"] = DEFAULTS["spark_range"]
+
+        # 动作活跃度：非法值回落标准
+        if d.get("activity_level") not in ACTIVITY_LEVELS:
+            d["activity_level"] = DEFAULTS["activity_level"]
+
+        # 关怀提醒：开关布尔化，间隔收敛到可选档位
+        for care_key in ("care_drink_enabled", "care_posture_enabled", "care_eye_enabled"):
+            d[care_key] = bool(d.get(care_key, DEFAULTS[care_key]))
+        for interval_key in ("care_drink_interval_min", "care_posture_interval_min", "care_eye_interval_min"):
+            raw = _as_int(d.get(interval_key), DEFAULTS[interval_key])
+            d[interval_key] = raw if raw in CARE_INTERVAL_CHOICES else DEFAULTS[interval_key]
 
         # 勿扰时间：必须是合法 "HH:MM"，否则回落默认
         # 注意：变量名不能复用上面的 value（mypy 已将其推断为 float）

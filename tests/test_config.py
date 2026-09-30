@@ -83,6 +83,30 @@ def test_names_mapping():
     assert UNIT_NAMES["usd_oz"] == "美元/盎司"
 
 
+def test_activity_and_care_sanitize(tmp_path):
+    """v0.7：活跃度非法值回落标准；关怀间隔收敛到可选档位、开关布尔化。"""
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps(
+            {
+                "activity_level": "hyper",  # 非法 -> normal
+                "care_drink_interval_min": 77,  # 不在档位 -> 60
+                "care_posture_enabled": 1,  # -> True
+                "care_eye_interval_min": "abc",  # 解析失败 -> 45
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg = Config.load(path)
+    assert cfg.get("activity_level") == "normal"
+    assert cfg.get("care_drink_enabled") is True  # 默认开
+    assert cfg.get("care_drink_interval_min") == 60
+    assert cfg.get("care_posture_enabled") is True
+    assert cfg.get("care_posture_interval_min") == 90
+    assert cfg.get("care_eye_enabled") is False  # 默认关
+    assert cfg.get("care_eye_interval_min") == 45
+
+
 def test_assets_exist():
     pet = asset_dir() / "pet"
     assert (asset_dir() / "icon.png").exists()

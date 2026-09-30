@@ -11,12 +11,12 @@
 
 | 平台 | 方式 | 说明 |
 |---|---|---|
-| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.5.6-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.6/GoldPet-v0.5.6-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
+| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.6.0-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.6.0/GoldPet-v0.6.0-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
 | **macOS** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 | **Linux** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 
 > 全部版本见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases)。
-> 校验文件：`GoldPet-v0.5.6-win64.exe.sha256`。
+> 校验文件：`GoldPet-v0.6.0-win64.exe.sha256`。
 
 ### 第一次打开怎么用？
 

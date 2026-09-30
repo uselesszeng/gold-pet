@@ -51,7 +51,7 @@ from .bubble import (
     render_price_html,
 )
 from .config import INTERVAL_CHOICES, SPARK_RANGE_NAMES, Config
-from .notifier import Alert, Notifier, filter_series
+from .notifier import RULE_CONFIG_KEYS, Alert, Notifier, filter_series
 from .paths import alert_history_path, asset_dir
 from .price import METALS, Snapshot, is_market_open
 
@@ -605,6 +605,8 @@ class PetWindow(QWidget):
         self.metal = order[(idx + 1) % len(order)]
         self.cfg.set("metal", self.metal)
         self.cfg.save()
+        # v0.5.6：换了品种，上一品种的水位/档位不再有意义
+        self.notifier.reset_state()
         self.speak("idle")
         self.refresh()
 
@@ -674,6 +676,9 @@ class PetWindow(QWidget):
             self._render(self.snapshot, silent=True)
 
     def open_settings(self) -> None:
+        # v0.5.6：记录改动前的提醒规则，规则变了就重置去重状态，
+        # 否则旧状态（如按旧阈值算出的档位）会与新规则对不上。
+        before = {key: self.cfg.get(key) for key in RULE_CONFIG_KEYS}
         dlg = SettingsDialog(self.cfg, self)
         if dlg.exec():
             self.metal = self.cfg.get("metal", "gold")
@@ -681,6 +686,9 @@ class PetWindow(QWidget):
             self._apply_window_flags()
             self._apply_interval()
             self.bubble.setVisible(bool(self.cfg.get("show_bubble", True)))
+            if before != {key: self.cfg.get(key) for key in RULE_CONFIG_KEYS}:
+                self.notifier.reset_state()
+                logging.getLogger("gold_pet").info("提醒规则已变更，已重置提醒去重状态")
             self.show()
             self.refresh()
 
@@ -810,6 +818,15 @@ class SettingsDialog(QDialog):
         self.cooldown_spin.setSuffix(" 分钟")
         self.cooldown_spin.setValue(int(cfg.get("alert_cooldown_sec", 600)) // 60)
 
+        # v0.5.6：新高新低最小步进，避免连续微微刷新高时刷屏
+        self.extreme_step_spin = QDoubleSpinBox()
+        self.extreme_step_spin.setRange(0.0, 5.0)
+        self.extreme_step_spin.setSingleStep(0.1)
+        self.extreme_step_spin.setDecimals(1)
+        self.extreme_step_spin.setSuffix(" %")
+        self.extreme_step_spin.setToolTip("新价位比上次提醒时再高出这么多才算「创新高」；0 表示任何新高都提醒")
+        self.extreme_step_spin.setValue(float(cfg.get("alert_extreme_step_pct", 0.1)))
+
         # 到价提醒（以元/克为基准，0 = 关闭）
         self.target_high_spin = QDoubleSpinBox()
         self.target_high_spin.setRange(0.0, 100000.0)
@@ -896,12 +913,19 @@ class SettingsDialog(QDialog):
 
         alert_form = QFormLayout()
         alert_form.addRow("涨跌提醒阈值", self.alert_spin)
-        alert_form.addRow("同类提醒冷却", self.cooldown_spin)
+        alert_form.addRow("重复提醒防抖", self.cooldown_spin)
+        alert_form.addRow("新高新低步进", self.extreme_step_spin)
         alert_form.addRow("到价提醒 ≥（0 关闭）", self.target_high_spin)
         alert_form.addRow("到价提醒 ≤（0 关闭）", self.target_low_spin)
         alert_form.addRow("", self.pct_enabled_check)
         alert_form.addRow("", self.target_enabled_check)
         alert_form.addRow("", self.extreme_enabled_check)
+        # v0.5.6：把去重语义直接写在界面上，避免用户误以为「价格没动怎么还在弹」
+        alert_form.addRow("", _hint_label(
+            "提醒只在「状态变化」时出现：价格横盘不会重复弹窗。\n"
+            "涨跌幅按阈值分档，跨入更高档位才再提醒一次；\n"
+            "新高新低要严格刷新当日水位才算；到价提醒回到目标价外后重新武装。"
+        ))
 
         dnd_form = QFormLayout()
         dnd_form.addRow("", self.dnd_check)
@@ -975,6 +999,7 @@ class SettingsDialog(QDialog):
         self.cfg.set("interval_sec", int(self.interval_combo.currentData()))
         self.cfg.set("alert_pct", float(self.alert_spin.value()))
         self.cfg.set("alert_cooldown_sec", int(self.cooldown_spin.value()) * 60)
+        self.cfg.set("alert_extreme_step_pct", float(self.extreme_step_spin.value()))
         self.cfg.set("target_high", float(self.target_high_spin.value()))
         self.cfg.set("target_low", float(self.target_low_spin.value()))
         self.cfg.set("opacity", self.opacity_slider.value() / 100.0)
@@ -1012,6 +1037,14 @@ def _section_label(text: str) -> QLabel:
     """设置面板里的分组标题。"""
     label = QLabel(text)
     label.setStyleSheet("font-weight: 600; color: #b8860b; padding-top: 6px;")
+    return label
+
+
+def _hint_label(text: str) -> QLabel:
+    """设置面板里的灰色说明文字（自动换行，不抢焦点）。"""
+    label = QLabel(text)
+    label.setWordWrap(True)
+    label.setStyleSheet("color: #8a8a8a; font-size: 11px; padding: 2px 0 0 0;")
     return label
 
 
@@ -1063,6 +1096,8 @@ class AlertHistoryDialog(QDialog):
 
     def _clear(self) -> None:
         self.notifier.clear_history()
+        # v0.5.6：清空历史的同时重置去重状态，用户不必重启就能重新收到提醒
+        self.notifier.reset_state()
         self._reload()
 
 

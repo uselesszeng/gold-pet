@@ -17,7 +17,8 @@ DEFAULTS: dict = {
     "unit": "cny_g",  # cny_g = 元/克, usd_oz = 美元/盎司
     "interval_sec": 60,  # 刷新间隔（秒）
     "alert_pct": 0.5,  # 涨跌幅提醒阈值（%）
-    "alert_cooldown_sec": 600,  # 同类提醒冷却时间（秒）
+    "alert_cooldown_sec": 600,  # 重复提醒防抖间隔（秒）
+    "alert_extreme_step_pct": 0.1,  # 新高新低最小步进（%），0 = 任何新高都提醒
     "target_high": 0.0,  # 到价提醒：金价 ≥ 该值（元/克）时提醒，0 = 关闭
     "target_low": 0.0,  # 到价提醒：金价 ≤ 该值（元/克）时提醒，0 = 关闭
     # 三类提醒的独立开关（v0.5 提醒中心）
@@ -113,6 +114,9 @@ class Config:
         d["interval_sec"] = interval if interval in INTERVAL_CHOICES else DEFAULTS["interval_sec"]
         d["alert_pct"] = _clamp(_as_float(d.get("alert_pct"), 0.5), 0.0, 20.0)
         d["alert_cooldown_sec"] = _clamp(_as_int(d.get("alert_cooldown_sec"), 600), 60, 7200)
+        d["alert_extreme_step_pct"] = _clamp(
+            _as_float(d.get("alert_extreme_step_pct"), 0.1), 0.0, 5.0
+        )
         d["opacity"] = _clamp(_as_float(d.get("opacity"), 1.0), 0.3, 1.0)
 
         pos = d.get("pos")

@@ -4,14 +4,29 @@
 
   涨跌幅提醒（pct）    现价相对昨收的涨跌幅超过阈值
   到价提醒（target）   现价突破用户设定的目标价（以元/克为基准）
-  创新高/新低（extreme）现价触及当日最高 / 最低
+  创新高/新低（extreme）现价触及并刷新当日最高 / 最低
 
 同时负责：
-  - 同类提醒的冷却去重（同一方向在冷却期内只提醒一次）
+  - 状态变化去重（v0.5.6，详见下）
   - 勿扰时段判断（跨零点也支持）
   - 提醒历史的读写（JSON，保留最近 N 条）
 
 设计原则与 price.py 一致：纯函数 + 可注入时钟，方便单测。
+
+v0.5.6「状态变化才提醒」语义
+---------------------------
+v0.5.5 及以前，冷却只按「类型 + 方向」判断，只要方向没变，冷却时间一到就再弹一次。
+价格横盘时（今日高 = 现价、涨跌幅恒定）会出现「同一句话每 10 分钟弹一次」，用户看到
+的是无意义的刷屏。v0.5.6 把去重依据从「时间」换成「状态是否变化」：
+
+  涨跌幅   按阈值分档（0.5% / 1.0% / 1.5% …），只有跨入更高档位才再次提醒。
+           横盘在 +1.14% 只提醒一次；涨到 +1.6% 再提醒一次。跌破阈值后重新武装。
+  新高新低 记住当日已播报的水位，只有严格越过水位才算「创新高 / 新低」。
+           水位单调递增（递减），因此天然不会重复。
+  到价提醒 只在「从目标价外进入目标价内」的那一刻提醒一次；回到目标价外后重新武装。
+
+alert_cooldown_sec 退居为「防抖」：只拦截「跌破阈值后又迅速越线」这类抖动，
+不再负责拦截「内容完全相同的重复提醒」——后者现在由状态判定根本性地挡掉。
 """
 
 from __future__ import annotations
@@ -33,6 +48,21 @@ KIND_NAMES = {
     KIND_TARGET: "到价提醒",
     KIND_EXTREME: "新高新低提醒",
 }
+
+# 影响提醒判定的配置项：其中任一项被用户改动，都应重置去重状态，
+# 否则旧状态（如旧阈值算出的档位）会与新规则对不上。
+RULE_CONFIG_KEYS = (
+    "metal",
+    "unit",
+    "alert_pct",
+    "alert_cooldown_sec",
+    "alert_extreme_step_pct",
+    "target_high",
+    "target_low",
+    "alert_pct_enabled",
+    "alert_target_enabled",
+    "alert_extreme_enabled",
+)
 
 
 @dataclass
@@ -115,7 +145,7 @@ def format_hhmm(minutes: int) -> str:
 
 
 class Notifier:
-    """三类提醒的规则判定 + 冷却去重 + 历史记录。
+    """三类提醒的规则判定 + 状态去重 + 历史记录。
 
     用法：每次刷新成功后调用 evaluate()，拿到 Alert 列表再决定如何展示。
     """
@@ -129,20 +159,43 @@ class Notifier:
         self.cfg = cfg
         self.history_path = Path(history_path) if history_path else None
         self.max_history = max_history
-        # 冷却状态：kind -> (最近触发时间, 方向)
-        self._last: dict[str, tuple[float, str]] = {}
+        # ---- 状态去重（v0.5.6）----
+        # 涨跌幅：上次播报的 (方向, 档位)；None 表示当前不在阈值区间内
+        self._pct_seen: tuple[str, int] | None = None
+        # 涨跌幅：上次播报时间；None 表示本次会话还没播报过（不能用 0.0，
+        # 否则注入小时钟的单元测试会把「从未播报」误判成「刚播报过」）
+        self._pct_at: float | None = None
+        # 新高新低：当日已播报的水位，如 {"high": 907.6, "low": 896.33}
+        self._extreme_water: dict[str, float] = {}
+        # 到价提醒：是否已处于生效态，如 {"high": True}
+        self._target_state: dict[str, bool] = {}
+        # 当前日期字符串，用于跨日重置水位
+        self._day: str = ""
         self._history: list[Alert] = []
         self._loaded = False
 
-    # ------------------------------------------------------------ 冷却判定
-    def _cooled_down(self, kind: str, side: str, now: float) -> bool:
-        """同类型同方向在冷却期内视为重复，不再提醒。"""
-        cooldown = int(self.cfg.get("alert_cooldown_sec", 600))
-        last_at, last_side = self._last.get(kind, (0.0, ""))
-        return now - last_at < cooldown and side == last_side
+    def reset_state(self) -> None:
+        """清空去重状态，让下一次判定从零开始。
 
-    def _mark(self, kind: str, side: str, now: float) -> None:
-        self._last[kind] = (now, side)
+        换品种、改阈值或清空提醒历史后调用，用户不必重启程序就能重新收到提醒。
+        """
+        self._pct_seen = None
+        self._pct_at = None
+        self._extreme_water.clear()
+        self._target_state.clear()
+        self._day = ""
+
+    # ------------------------------------------------------------ 去重辅助
+    def _cooldown(self) -> int:
+        """防抖间隔（秒）。手改配置成负数也能兜住。"""
+        return max(0, int(self.cfg.get("alert_cooldown_sec", 600)))
+
+    def _roll_day(self, now: float) -> None:
+        """跨日时清空当日水位：新的一天重新计「今日新高」。"""
+        day = time.strftime("%Y-%m-%d", time.localtime(now))
+        if day != self._day:
+            self._day = day
+            self._extreme_water.clear()
 
     def _enabled(self, kind: str) -> bool:
         """三类提醒各自的总开关（默认开）。"""
@@ -162,6 +215,7 @@ class Notifier:
         base_quote 元/克 基准行情，用于到价提醒（与展示单位无关）
         """
         now = now if now is not None else time.time()
+        self._roll_day(now)
         alerts: list[Alert] = []
         alerts += self._check_pct(quote, metal_name, now)
         alerts += self._check_extreme(quote, metal_name, now)
@@ -169,41 +223,77 @@ class Notifier:
         return alerts
 
     def _check_pct(self, quote: Quote, metal_name: str, now: float) -> list[Alert]:
+        """涨跌幅提醒：按阈值分档，只在跨入更高档位时提醒。
+
+        阈值 0.5% 时档位为 0.5~1.0 → 1 档、1.0~1.5 → 2 档…… 横盘在 1.14% 只会提醒
+        一次（2 档），不会再随时间反复弹窗。
+        """
         if not self._enabled(KIND_PCT):
             return []
         threshold = float(self.cfg.get("alert_pct", 0.5))
-        pct = quote.change_pct
-        if threshold <= 0 or abs(pct) < threshold:
+        magnitude = abs(quote.change_pct)
+
+        if threshold <= 0 or magnitude < threshold:
+            # 回到阈值以内：重新武装，下次再越线可以提醒（受防抖约束）
+            self._pct_seen = None
             return []
-        side = "up" if pct > 0 else "down"
-        if self._cooled_down(KIND_PCT, side, now):
+
+        side = "up" if quote.change_pct > 0 else "down"
+        step = int(magnitude / threshold)  # 阈值整数倍：1 档 / 2 档 / 3 档 …
+        seen = self._pct_seen
+
+        if seen is not None and seen[0] == side and step <= seen[1]:
+            # 同方向且档位没有更高 —— 内容与上次一模一样，不再提醒
             return []
-        self._mark(KIND_PCT, side, now)
-        arrow = "上涨" if pct > 0 else "下跌"
+        if seen is None and self._pct_at is not None and now - self._pct_at < self._cooldown():
+            # 刚从阈值内回来又立刻越线：视为抖动，交给防抖过滤
+            return []
+
+        self._pct_seen = (side, step)
+        self._pct_at = now
+        arrow = "上涨" if quote.change_pct > 0 else "下跌"
         return [
             Alert(
                 kind=KIND_PCT,
                 side=side,
                 title="黄金桌宠提醒",
-                body=f"{metal_name}价{arrow} {abs(pct):.2f}%，已超过设定阈值 {threshold:.2f}%",
+                body=f"{metal_name}价{arrow} {magnitude:.2f}%，已超过设定阈值 {threshold:.2f}%",
                 at=now,
             )
         ]
 
     def _check_extreme(self, quote: Quote, metal_name: str, now: float) -> list[Alert]:
+        """新高新低提醒：只有严格刷新当日水位、且幅度达到最小步进才算数。
+
+        行情源的当日最高价本身就会被现价不断顶上去，因此不能直接用「现价 == 当日高」
+        判定（那样横盘时会反复命中）。这里额外记住「上次播报过的价位」，要求现价严格
+        越过它才提醒，水位单调因此天然不重复。
+
+        再加一道「最小步进」（alert_extreme_step_pct，默认 0.1%）：金价在 15:21~15:23
+        连续刷出 907.70 / 907.96 / 908.07 时，按纯粹的水位判定会连弹三次，而 0.1%
+        的步进会把它们收敛成一次。设 0 即退化为「任何新高都提醒」。
+        """
         if not self._enabled(KIND_EXTREME):
             return []
         if quote.high <= 0 and quote.low <= 0:
             return []
+
         if quote.high > 0 and quote.price >= quote.high:
             side, title = "high", "创新高"
         elif quote.low > 0 and quote.price <= quote.low:
             side, title = "low", "创新低"
         else:
             return []
-        if self._cooled_down(KIND_EXTREME, side, now):
-            return []
-        self._mark(KIND_EXTREME, side, now)
+
+        prev = self._extreme_water.get(side)
+        if prev is not None:
+            ratio = max(0.0, float(self.cfg.get("alert_extreme_step_pct", 0.1))) / 100.0
+            if side == "high" and quote.price <= prev * (1 + ratio):
+                return []  # 水位只多了一点点：不值得再提醒
+            if side == "low" and quote.price >= prev * (1 - ratio):
+                return []
+
+        self._extreme_water[side] = quote.price
         return [
             Alert(
                 kind=KIND_EXTREME,
@@ -218,7 +308,11 @@ class Notifier:
         ]
 
     def _check_target(self, base: Quote, metal_name: str, now: float) -> list[Alert]:
-        """到价提醒：以元/克为基准，与当前展示单位无关。"""
+        """到价提醒：以元/克为基准，与当前展示单位无关。
+
+        只在「从目标价外进入目标价内」的那一刻提醒一次；价格回到目标价外后重新武装，
+        因此横盘在目标价之上不会反复弹窗。
+        """
         if not self._enabled(KIND_TARGET):
             return []
         high = float(self.cfg.get("target_high", 0.0))
@@ -227,15 +321,23 @@ class Notifier:
             return []
         if not base.unit.startswith("元"):
             return []  # 拿不到元/克基准就不判断，避免单位错配
+
+        # 先处理「退出生效态」：回到目标价外就重新武装
+        if high > 0 and base.price < high:
+            self._target_state["high"] = False
+        if low > 0 and base.price > low:
+            self._target_state["low"] = False
+
         if high > 0 and base.price >= high:
             side, body = "high", f"金价已涨到 {base.price:.2f} 元/克（目标 {high:.2f}）"
         elif low > 0 and base.price <= low:
             side, body = "low", f"金价已跌到 {base.price:.2f} 元/克（目标 {low:.2f}）"
         else:
             return []
-        if self._cooled_down(KIND_TARGET, side, now):
-            return []
-        self._mark(KIND_TARGET, side, now)
+
+        if self._target_state.get(side):
+            return []  # 已在生效态：不重复提醒
+        self._target_state[side] = True
         return [Alert(kind=KIND_TARGET, side=side, title="黄金桌宠 · 到价提醒", body=body, at=now)]
 
     # ------------------------------------------------------------ 勿扰模式

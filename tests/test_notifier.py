@@ -111,21 +111,92 @@ def test_notifier_quiet_hours_respects_switch():
 # ------------------------------------------------------------------ 涨跌幅提醒
 
 
-def test_pct_alert_triggers_and_cools_down():
+def test_pct_alert_triggers_and_never_repeats_on_flat_price():
+    """v0.5.6 核心回归：涨跌幅不变时不再随时间反复弹窗。
+
+    旧逻辑只按「类型 + 方向」去重，冷却 600 秒一到就再弹一次。真实用户日志里
+    金价锁死 906.80、涨跌幅恒为 +1.14%，每 10 分钟弹一次同一句话。
+    """
     cfg = Config()
     cfg.set("alert_pct", 0.5)
     cfg.set("alert_cooldown_sec", 600)
     n = Notifier(cfg)
-    q = make_quote(price=905.0, prev=900.0)  # +0.56%
+    q = make_quote(price=905.0, prev=900.0)  # +0.56% → 1 档
 
     alerts = n.evaluate(q, "黄金", now=1000.0)
     assert [a.kind for a in alerts] == [KIND_PCT]
     assert alerts[0].side == "up"
 
-    # 冷却期内同方向不重复
+    # 同一涨跌幅：冷却期内不重复，冷却期外也不重复
     assert n.evaluate(q, "黄金", now=1100.0) == []
-    # 超过冷却后可再次触发
-    assert [a.kind for a in n.evaluate(q, "黄金", now=2000.0)] == [KIND_PCT]
+    assert n.evaluate(q, "黄金", now=50000.0) == []  # 同一天内的很久以后
+
+
+def test_pct_alert_fires_again_only_on_higher_step():
+    """只有跨入更高档位（阈值整数倍）才再提醒一次。"""
+    cfg = Config()
+    cfg.set("alert_pct", 0.5)
+    n = Notifier(cfg)
+
+    # +0.67% → 1 档
+    q1 = make_quote(price=906.0, prev=900.0)
+    assert [a.kind for a in n.evaluate(q1, "黄金", now=1.0)] == [KIND_PCT]
+    assert n.evaluate(q1, "黄金", now=2.0) == []
+
+    # +1.14% → 2 档：跨档，提醒
+    q2 = make_quote(price=910.26, prev=900.0)
+    assert [a.kind for a in n.evaluate(q2, "黄金", now=3.0)] == [KIND_PCT]
+    assert n.evaluate(q2, "黄金", now=4.0) == []
+
+    # +1.60% → 3 档：继续跨档，提醒
+    q3 = make_quote(price=914.4, prev=900.0)
+    assert [a.kind for a in n.evaluate(q3, "黄金", now=5.0)] == [KIND_PCT]
+
+    # 回落到 2 档：没有创出更高的涨幅，不提醒
+    assert n.evaluate(q2, "黄金", now=6.0) == []
+
+
+def test_pct_alert_rearms_after_leaving_threshold():
+    """跌破阈值后重新武装；抖动由防抖间隔拦下。"""
+    cfg = Config()
+    cfg.set("alert_pct", 0.5)
+    cfg.set("alert_cooldown_sec", 600)
+    n = Notifier(cfg)
+    hot = make_quote(price=906.0, prev=900.0)  # +0.67%
+    flat = make_quote(price=901.0, prev=900.0)  # +0.11%，回到阈值内
+
+    assert [a.kind for a in n.evaluate(hot, "黄金", now=1000.0)] == [KIND_PCT]
+    assert n.evaluate(flat, "黄金", now=1010.0) == []
+    # 抖动：防抖期内又越线，不提醒
+    assert n.evaluate(hot, "黄金", now=1020.0) == []
+    # 超过防抖间隔后再次越线：重新提醒
+    assert [a.kind for a in n.evaluate(hot, "黄金", now=2000.0)] == [KIND_PCT]
+
+
+def test_pct_alert_fires_on_direction_reversal():
+    """同样 1 档但方向反转属于新信息，应立刻提醒。"""
+    cfg = Config()
+    cfg.set("alert_pct", 0.5)
+    n = Notifier(cfg)
+    up = make_quote(price=906.0, prev=900.0)  # +0.67%
+    down = make_quote(price=894.0, prev=900.0)  # -0.67%
+
+    assert [a.side for a in n.evaluate(up, "黄金", now=1.0)] == ["up"]
+    assert [a.side for a in n.evaluate(up, "黄金", now=2.0)] == []
+    assert [a.side for a in n.evaluate(down, "黄金", now=3.0)] == ["down"]
+
+
+def test_reset_state_lets_alerts_fire_again():
+    """reset_state() 后同一状态可以重新提醒（换品种 / 改阈值 / 清空历史时调用）。"""
+    cfg = Config()
+    cfg.set("alert_pct", 0.5)
+    n = Notifier(cfg)
+    q = make_quote(price=906.0, prev=900.0)
+
+    assert [a.kind for a in n.evaluate(q, "黄金", now=1.0)] == [KIND_PCT]
+    assert n.evaluate(q, "黄金", now=2.0) == []
+    n.reset_state()
+    assert [a.kind for a in n.evaluate(q, "黄金", now=3.0)] == [KIND_PCT]
 
 
 def test_pct_alert_below_threshold_no_trigger():
@@ -186,6 +257,107 @@ def test_extreme_ignored_without_high_low():
     assert not any(a.kind == KIND_EXTREME for a in n.evaluate(q, "黄金", now=1.0))
 
 
+def test_extreme_high_never_repeats_while_price_flat():
+    """v0.5.6 核心回归：现价贴在当日最高价横盘时不再反复弹「创新高」。
+
+    行情源的当日最高价本身就被现价顶着，`price >= high` 恒成立，旧逻辑因此
+    每过冷却期就重弹一次。现在要求严格越过上次播报的水位。
+    """
+    cfg = Config()
+    n = Notifier(cfg)
+    q = make_quote(price=907.6, prev=900.0, high=907.6, low=896.33)
+    # 用明确的同一天基准时间，避免时间戳跨日触发水位重置
+    base = time.mktime((2026, 9, 30, 9, 0, 0, 0, 0, -1))
+
+    assert any(a.kind == KIND_EXTREME for a in n.evaluate(q, "黄金", now=base))
+    # 价格一动不动：当天内无论隔多久都不该再弹
+    assert n.evaluate(q, "黄金", now=base + 60) == []
+    assert n.evaluate(q, "黄金", now=base + 8 * 3600) == []
+
+
+def test_extreme_high_requires_strictly_new_watermark():
+    """只有严格刷新水位才算新高：持平不报、回落不报、真突破才报。"""
+    cfg = Config()
+    cfg.set("alert_extreme_step_pct", 0.0)  # 本用例只验证水位，先关掉步进
+    n = Notifier(cfg)
+    # (现价, 当日最高, 是否应提醒)
+    stages = [
+        (907.6, 907.6, True),  # 首次：播报并记下水位
+        (907.6, 907.6, False),  # 持平：内容相同，不重复
+        (906.0, 907.6, False),  # 回落：现价低于今高，不判定
+        (907.0, 907.6, False),  # 仍未越过水位
+        (908.1, 908.1, True),  # 真突破：提醒
+        (908.1, 908.1, False),  # 又横盘：不重复
+    ]
+    for idx, (price, high, expected) in enumerate(stages):
+        q = make_quote(price=price, prev=900.0, high=high, low=896.33)
+        fired = any(a.kind == KIND_EXTREME for a in n.evaluate(q, "黄金", now=1000.0 + idx))
+        assert fired is expected, f"第 {idx} 步（现价 {price} / 今高 {high}）期望 {expected}"
+
+
+def test_extreme_low_requires_strictly_new_watermark():
+    cfg = Config()
+    cfg.set("alert_extreme_step_pct", 0.0)  # 本用例只验证水位
+    n = Notifier(cfg)
+    first = make_quote(price=896.33, prev=900.0, high=907.6, low=896.33)
+    assert any(a.kind == KIND_EXTREME and a.side == "low" for a in n.evaluate(first, "黄金", now=1.0))
+    assert n.evaluate(first, "黄金", now=2.0) == []
+
+    deeper = make_quote(price=895.0, prev=900.0, high=907.6, low=895.0)
+    alerts = n.evaluate(deeper, "黄金", now=3.0)
+    assert any(a.kind == KIND_EXTREME and a.side == "low" for a in alerts)
+    assert n.evaluate(deeper, "黄金", now=4.0) == []
+
+
+def test_extreme_step_damps_micro_highs():
+    """v0.5.6：0.1% 步进把连续微创新高收敛成一次提醒。
+
+    真实用户日志里 15:21~15:23 连刷 907.70 / 907.96 / 908.07，只按水位判定会连弹
+    三次；加上步进后只报第一次，直到真的再涨出 0.1% 才提醒。
+    """
+    cfg = Config()
+    cfg.set("alert_extreme_step_pct", 0.1)
+    n = Notifier(cfg)
+    base = time.mktime((2026, 9, 30, 9, 0, 0, 0, 0, -1))
+
+    def fired(price, offset):
+        q = make_quote(price=price, prev=900.0, high=price, low=896.33)
+        return any(a.kind == KIND_EXTREME for a in n.evaluate(q, "黄金", now=base + offset))
+
+    assert fired(907.70, 0) is True  # 首次播报并记下水位
+    assert fired(907.96, 60) is False  # 只高 0.03%，不值得再提醒
+    assert fired(908.07, 120) is False  # 仍未达 907.70 × 1.001 = 908.61
+    assert fired(908.70, 180) is True  # 越过步进：提醒
+    assert fired(908.70, 240) is False  # 又横盘：不重复
+
+
+def test_extreme_step_zero_reports_every_new_high():
+    """步进设为 0 时退化为「任何新高都提醒」，保留给想听全部动静的用户。"""
+    cfg = Config()
+    cfg.set("alert_extreme_step_pct", 0.0)
+    n = Notifier(cfg)
+    base = time.mktime((2026, 9, 30, 9, 0, 0, 0, 0, -1))
+
+    for idx, price in enumerate([907.70, 907.96, 908.07]):
+        q = make_quote(price=price, prev=900.0, high=price, low=896.33)
+        assert any(
+            a.kind == KIND_EXTREME for a in n.evaluate(q, "黄金", now=base + idx)
+        ), f"现价 {price} 应提醒"
+
+
+def test_extreme_watermark_resets_on_new_day():
+    """跨日后水位清零：新一天的首个高点可以重新提醒。"""
+    n = Notifier(Config())
+    q = make_quote(price=950.0, prev=900.0, high=950.0, low=880.0)
+    day1 = time.mktime((2026, 9, 30, 10, 0, 0, 0, 0, -1))
+    day2 = time.mktime((2026, 10, 1, 10, 0, 0, 0, 0, -1))
+
+    assert any(a.kind == KIND_EXTREME for a in n.evaluate(q, "黄金", now=day1))
+    assert n.evaluate(q, "黄金", now=day1 + 60) == []
+    # 次日水位清空，同一价位重新提醒一次
+    assert any(a.kind == KIND_EXTREME for a in n.evaluate(q, "黄金", now=day2))
+
+
 # ------------------------------------------------------------------ 到价提醒
 
 
@@ -232,6 +404,28 @@ def test_target_disabled_switch():
     n = Notifier(cfg)
     q = make_quote(price=800.0)
     assert not any(a.kind == KIND_TARGET for a in n.evaluate(q, "黄金", base_quote=q, now=1.0))
+
+
+def test_target_fires_once_until_price_leaves_zone():
+    """v0.5.6：到价提醒只在「进入目标价」那一刻报一次，横盘不重复。"""
+    cfg = Config()
+    cfg.set("target_high", 950.0)
+    n = Notifier(cfg)
+    above = make_quote(price=960.0)
+    below = make_quote(price=940.0)
+
+    def fired(quote, now):
+        return any(
+            a.kind == KIND_TARGET for a in n.evaluate(quote, "黄金", base_quote=quote, now=now)
+        )
+
+    assert fired(above, 1.0) is True
+    # 一直在目标价之上：无论隔多久都不再提醒
+    assert fired(above, 99999.0) is False
+    # 回到目标价之下：重新武装（本身不提醒）
+    assert fired(below, 200000.0) is False
+    # 再次突破：重新提醒
+    assert fired(above, 200100.0) is True
 
 
 # ------------------------------------------------------------------ 历史

@@ -192,6 +192,26 @@ LINES = {
         "远处的风景免费，主人快看一眼",
         "鲸娘替你盯盘，主人看看绿色养养眼~",
     ],
+    # 活跃度切换台词（v0.7.2）：切到哪一档就说哪组，act_quiet 必含「安静美少女」
+    "act_quiet": [
+        "嘘——我要变成安静美少女了，主人有事再叫我~",
+        "（收起尾巴站好）安静美少女上线啦~",
+        "进入安静模式，鲸娘会乖乖盯着金价不乱动~",
+        "好累哦……鲸娘要变成安静美少女歇一歇~",
+        "安静模式启动！只眨眼，不蹦跶~",
+    ],
+    "act_normal": [
+        "回到标准节奏啦，鲸娘恢复正常~",
+        "标准模式！该盯盘盯盘，该卖萌卖萌~",
+        "节奏刚刚好，这是鲸娘最舒服的状态~",
+        "（伸了个懒腰）标准模式，继续陪主人~",
+    ],
+    "act_lively": [
+        "活力全开！鲸娘要开始蹦蹦跳跳啦~",
+        "（尾巴摇得飞起）活泼模式启动！",
+        "活泼模式！今天心情超好，一起加油呀~",
+        "嘿嘿，动起来才舒服嘛~活泼模式！",
+    ],
 }
 
 # 「大肥鱼」傲娇反应（v0.7.1）：连续叫会递进——反驳 → 生气 → 记仇；
@@ -351,7 +371,8 @@ class PetWindow(QWidget):
 
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self._tick_frame)
-        self.anim_timer.start(self._anim_interval(self.state))
+        self._activity_level = self.cfg.get("activity_level", "normal")
+        self._sync_anim_timer()  # v0.7.2：安静档启动即定格，不启动帧循环
 
         # 关怀提醒（v0.7）：喝水 / 久坐 / 护眼，只走气泡
         self.care = CareScheduler(self.cfg)
@@ -503,14 +524,38 @@ class PetWindow(QWidget):
     def _anim_interval(self, state: str) -> int:
         """按「动作活跃度」换算该状态的帧间隔（毫秒）。
 
-        quiet = 安静(×3 慢动) / normal = 标准 / lively = 活泼(×0.7)。
+        quiet = 安静（系数 0，完全静止） / normal = 标准 / lively = 活泼(×0.7)。
+        返回 0 表示该档位要求静止：帧循环应停住，只显示第 0 帧（v0.7.2）。
         """
         factor = ACTIVITY_LEVELS.get(self.cfg.get("activity_level", "normal"), ("", 1.0))[1]
         return round(STATES[state][1] * factor)
 
+    def _sync_anim_timer(self) -> None:
+        """按当前状态与活跃度决定动画 timer 走或停（单点收口，v0.7.2）。
+
+        安静档（间隔 0）：停表并定格在第 0 帧——「安静就是不动」；
+        其他档位：按帧间隔开跑（已在跑则只更新节奏）。
+        """
+        interval = self._anim_interval(self.state)
+        if interval <= 0:
+            self.anim_timer.stop()
+            self.frame_idx = 0
+            self.pet.setPixmap(self._current_pixmap())
+        else:
+            self.anim_timer.setInterval(interval)
+            if not self.anim_timer.isActive():
+                self.anim_timer.start()
+
     def _apply_activity(self) -> None:
-        """活跃度变更后立即重设当前动画节奏。"""
-        self.anim_timer.setInterval(self._anim_interval(self.state))
+        """活跃度变更后立即生效，并说一句对应档位的台词（v0.7.2）。"""
+        level = self.cfg.get("activity_level", "normal")
+        if level == self._activity_level:
+            return  # 档位没变，不重排也不说话
+        was = self._activity_level
+        self._activity_level = level
+        self._sync_anim_timer()
+        self.speak(f"act_{level}")
+        logging.getLogger("gold_pet").info("活跃度切换：%s -> %s", was, level)
 
     def _set_state(self, state: str) -> None:
         if state not in self.frames:
@@ -519,7 +564,7 @@ class PetWindow(QWidget):
             return
         self.state = state
         self.frame_idx = 0
-        self.anim_timer.setInterval(self._anim_interval(state))
+        self._sync_anim_timer()  # v0.7.2：安静档下换状态也是定格，不播循环
         self.pet.setPixmap(self._current_pixmap())
 
     def _current_pixmap(self) -> QPixmap:

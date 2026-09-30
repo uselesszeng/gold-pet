@@ -837,3 +837,55 @@ def test_no_gold_girl_naming_regression():
             assert "金娘" not in line, f"台词组 {group} 出现旧称呼：{line}"
     src = Path(__file__).resolve().parent.parent / "gold_pet" / "ui.py"
     assert "金娘" not in src.read_text(encoding="utf-8"), "ui.py 仍存在旧称呼「金娘」"
+
+
+# ---------------------------------------------------------------- v0.7.2 安静档静止
+
+
+def test_activity_lines_exist():
+    """三档切换台词组存在，各 ≥3 条；安静组必含「安静美少女」。"""
+    for key in ("act_quiet", "act_normal", "act_lively"):
+        assert key in LINES and len(LINES[key]) >= 3, f"{key} 台词缺失或太少"
+    assert any("安静美少女" in line for line in LINES["act_quiet"]), "安静组缺「安静美少女」"
+
+
+def test_anim_interval_zero_means_frozen(app, tmp_path):
+    """quiet 系数 0 → 帧间隔 0（静止）；normal/lively 按系数换算。"""
+    w = _window(app, tmp_path)
+    w.cfg.set("activity_level", "quiet")
+    assert w._anim_interval("idle") == 0
+    w.cfg.set("activity_level", "lively")
+    from gold_pet.config import ACTIVITY_LEVELS
+
+    factor = ACTIVITY_LEVELS["lively"][1]
+    assert w._anim_interval("idle") == round(STATES["idle"][1] * factor)
+
+
+def test_quiet_level_freezes_animation(app, tmp_path):
+    """安静档：帧循环停表 + 定格第 0 帧；切回标准后恢复跑动。"""
+    w = _window(app, tmp_path)
+    w.cfg.set("activity_level", "quiet")
+    w._apply_activity()
+    assert not w.anim_timer.isActive(), "安静档帧循环应停住"
+    assert w.frame_idx == 0
+    frames = w.frames.get("idle") or []
+    assert frames and w.pet.pixmap().cacheKey() == frames[0].cacheKey()
+
+    w.cfg.set("activity_level", "normal")
+    w._apply_activity()
+    assert w.anim_timer.isActive(), "标准档帧循环应恢复"
+    assert w.anim_timer.interval() == STATES["idle"][1]
+
+
+def test_apply_activity_speaks_level_line(app, tmp_path):
+    """切档说话：切到安静说 act_quiet 组台词；档位没变则不说话。"""
+    w = _window(app, tmp_path)
+    before = w.bubble.text()
+    w.cfg.set("activity_level", "quiet")
+    w._apply_activity()
+    assert any(line in w.bubble.text() for line in LINES["act_quiet"]), "切安静应说对应台词"
+    assert w._activity_level == "quiet"
+
+    w.bubble.setText(before)
+    w._apply_activity()  # 档位没变：不应说话
+    assert w.bubble.text() == before

@@ -11,12 +11,12 @@
 
 | 平台 | 方式 | 说明 |
 |---|---|---|
-| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.7.1-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.1/GoldPet-v0.7.1-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
+| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.7.2-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.2/GoldPet-v0.7.2-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
 | **macOS** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 | **Linux** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 
 > 全部版本见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases)。
-> 校验文件：`GoldPet-v0.7.1-win64.exe.sha256`。
+> 校验文件：`GoldPet-v0.7.2-win64.exe.sha256`。
 
 ### 喜欢哪个形象，就下哪个版本
 
@@ -25,7 +25,7 @@
 
 | 形象 | 对应版本 | 直链 |
 |---|---|---|
-| 🐋 **DeepSeek 鲸鱼娘**（蓝发女仆，画师素材） | v0.6.0（当前） | [下载 v0.7.1（当前，含大肥鱼彩蛋）](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.1/GoldPet-v0.7.1-win64.exe) · [v0.6.0](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.6.0/GoldPet-v0.6.0-win64.exe) |
+| 🐋 **DeepSeek 鲸鱼娘**（蓝发女仆，画师素材） | v0.6.0（当前） | [下载 v0.7.2（当前，安静档静止）](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.2/GoldPet-v0.7.2-win64.exe) · [v0.6.0](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.6.0/GoldPet-v0.6.0-win64.exe) |
 | 🥇 **金色鲸鱼女仆**（PIL 自绘，金主色） | v0.5.5 ~ v0.5.6 | [v0.5.5](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.5/GoldPet-v0.5.5-win64.exe) · [v0.5.6](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.6/GoldPet-v0.5.6-win64.exe)（含提醒修复，推荐） |
 | 🐥 早期自绘少女 | v0.4.1 ~ v0.5.4 | 见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases) |
 
@@ -103,7 +103,7 @@
 | 功能 | 说明 |
 |---|---|
 | 🪙 桌宠窗口 | 无边框、透明背景、置顶、可拖动、位置记忆 |
-| 🎞️ 状态动画 | 待机 / 涨（跳跃）/ 跌（沮丧）/ 摸头（挥手）/ 加载 / 离线，**活跃度三档可调**（安静 / 标准 / 活泼） |
+| 🎞️ 状态动画 | 待机 / 涨（跳跃）/ 跌（沮丧）/ 摸头（挥手）/ 加载 / 离线，**活跃度三档可调**：😴 安静（**完全静止定格**）/ 🙂 标准 / 🤩 活泼，切换立即生效并说一句档位台词 |
 | 💬 价格气泡 | 国内金价 元/克 + 涨跌额与涨跌幅 + 更新时间 |
 | 🔄 自动刷新 | 默认 60 秒，可选 15/30/60/300/900 秒；双击立即刷新 |
 | 🔔 状态变化提醒 | 只有「状态真的变了」才弹：涨跌幅跨入更高档位、新高新低刷新水位、金价进出目标价。**价格横盘时不会重复弹窗** |
@@ -345,6 +345,13 @@ Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授�
 - 该素材按其**非商业使用许可**分发：本项目为免费、无营利的非商业用途，符合许可范围；
   若你将本程序用于商业场景，请自行移除该素材或取得原作者授权。
 - 本项目代码部分仍为 MIT；素材部分的版权遵循其原作者声明。
+
+## v0.7.2 安静档真安静
+
+- **安静档 = 完全静止**：v0.7.0 的「安静」是慢动作（×3），用户反馈依旧在动。
+  现在安静档帧循环停表、定格不动（行情状态动画同样定格），切回标准/活泼立即恢复。
+- **切档台词**：切换活跃度时鲸娘说一句对应档位的话——安静档必说
+  「我要变成安静美少女」系台词；档位没变时不重复说。
 
 ## v0.7.1 称呼更正与大肥鱼彩蛋
 

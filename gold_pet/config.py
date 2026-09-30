@@ -31,7 +31,7 @@ DEFAULTS: dict = {
     "dnd_end": "08:00",
     # 迷你走势图时间范围：1h / today / all
     "spark_range": "1h",
-    # 动作活跃度：quiet = 安静(帧间隔×3) / normal = 标准 / lively = 活泼(×0.7)
+    # 动作活跃度：quiet = 安静(完全静止，系数 0) / normal = 标准 / lively = 活泼(×0.7)
     "activity_level": "normal",
     # 关怀提醒（v0.7）：只走鲸娘气泡，不弹系统通知、不进提醒中心
     "care_drink_enabled": True,  # 喝水提醒（默认开）
@@ -55,9 +55,9 @@ INTERVAL_CHOICES = [15, 30, 60, 300, 900]
 # 走势图时间范围：键 -> 展示名
 SPARK_RANGE_NAMES = {"1h": "1 小时", "today": "今日", "all": "全部"}
 
-# 动作活跃度：键 -> (展示名, 帧间隔系数)
+# 动作活跃度：键 -> (展示名, 帧间隔系数)；系数 0 表示完全静止（安静档，v0.7.2）
 ACTIVITY_LEVELS = {
-    "quiet": ("😴 安静", 3.0),
+    "quiet": ("😴 安静", 0.0),
     "normal": ("🙂 标准", 1.0),
     "lively": ("🤩 活泼", 0.7),
 }

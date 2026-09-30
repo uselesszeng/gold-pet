@@ -19,3 +19,6 @@ coverage.xml
 
 # 调试截图（tools/grab_screen.py 的产物）
 *.bmp
+
+# 发布包暂存（体积大，不进仓库；通过 Release 附件分发）
+release/

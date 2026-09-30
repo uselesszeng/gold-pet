@@ -44,3 +44,24 @@ $:
           # fail_under 在 pyproject.toml 的 [tool.coverage.report] 中定义（当前 65%）
           script: |
             python -m pytest tests --cov=gold_pet --cov-report=term-missing
+
+  # 打 tag 时自动把 release/ 目录下的发布产物挂到同名 Release 附件。
+  #
+  # 前置条件：
+  #   1. 该 tag 必须已存在对应的 Release（可在网页端或用
+  #      tools/cnb_release_upload.py 手动创建），否则插件会报错；
+  #   2. 待上传的 exe / sha256 需在 release/ 目录内随 tag 一起提交。
+  #
+  # 说明：官方托管节点只有 Linux，无法在此构建 Windows exe，
+  #       故 Windows 产物仍走「本地构建 + 提交到 release/ + 打 tag」的方式。
+  tag_push:
+    - name: attach-release-assets
+      stages:
+        - name: upload release assets
+          image: cnbcool/attachments:latest
+          settings:
+            # tag / commit 都不传时，tag_push 事件取 $CNB_BRANCH 作为 tag
+            attachments:
+              - "./release/*.exe"
+              - "./release/*.sha256"
+            ttl: 0 # 永久保留

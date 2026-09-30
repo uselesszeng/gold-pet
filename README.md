@@ -2,7 +2,26 @@
 
 一只住在桌面右下角的「金娘」，**实时盯着金价**：涨了笑、跌了哭，点一下切换 国内元/克 ↔ 国际美元/盎司。
 
-> 一期只做 **Windows**。Android / 鸿蒙 HAP 见 [docs/PRD.md](docs/PRD.md) 的二期、三期规划。
+> 平台支持：**Windows 首选**（提供免安装 exe），**macOS / Linux 亦支持**（源码运行，见下方说明）。
+> Android / 鸿蒙 HAP 见 [docs/PRD.md](docs/PRD.md) 的二期、三期规划。
+
+## 下载安装
+
+| 平台 | 方式 | 说明 |
+|---|---|---|
+| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.5.1-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.1/GoldPet-v0.5.1-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
+| **macOS** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
+| **Linux** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
+
+> 全部版本见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases)。
+> 校验文件：`GoldPet-v0.5.1-win64.exe.sha256`（SHA256 `871f7e36...a8db60`）。
+
+### Windows 首次运行提示
+
+1. 可能弹出蓝色窗口「**已保护你的电脑**」——程序未做代码签名。点 **更多信息 → 仍要运行**。
+2. 部分杀毒软件可能误报，这是 PyInstaller 打包的通配现象，可加信任目录。
+3. 程序**不显示在任务栏**（桌宠设计如此），请在**系统托盘**（时钟旁 `^` 展开区）找到它。
+4. 右键金娘可打开菜单：刷新 / 切换单位 / 切换品种 / 提醒历史 / 设置。
 
 ## 功能
 
@@ -21,7 +40,7 @@
 | ⚙️ 设置 | 单位、刷新间隔、提醒阈值、不透明度、置顶、开机自启 |
 | 🔌 离线兜底 | 断网显示「离线」+ 上次价格，不崩溃 |
 
-## 快速开始（Windows）
+## 快速开始（Windows 源码运行）
 
 ```bat
 :: 1. 安装依赖（只需一次）
@@ -37,6 +56,24 @@ python run.py
 build.bat
 :: 产物：dist\黄金桌宠.exe
 ```
+
+## macOS / Linux 从源码运行
+
+本项目基于 PySide6，**同一套代码在三大平台均可运行**，只是未提供 macOS / Linux 的预编译包。
+
+完整步骤（含系统依赖、常见报错、打包方法）见 **[docs/从源码运行.md](docs/从源码运行.md)**。
+
+三步速览：
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate   # 1. 建虚拟环境
+pip install -r requirements.txt                       # 2. 装依赖（约 200MB）
+python run.py                                          # 3. 运行
+```
+
+> 需要 **Python 3.11+**。Linux 若报 `Could not load the Qt platform plugin "xcb"`，
+> 是缺系统库 —— 具体包名见文档第四步的常见问题。
+
 
 ## 操作说明
 
@@ -66,13 +103,14 @@ build.bat
 ```
 gold-pet/
 ├── docs/PRD.md          产品需求文档
-├── gold_pet/            源码（config / price / notifier / tray_icon / ui / autostart / main）
+├── gold_pet/            源码（config / price / notifier / tray_icon / ui / autostart / paths / main）
 ├── assets/pet/*.png     动画帧（tools/gen_assets.py 生成）
 ├── assets/icon.ico      应用图标
 ├── tools/gen_assets.py  素材生成脚本（改配色/表情后重跑）
 ├── requirements.txt
-├── run.bat              开发运行
-└── build.bat            打包 exe
+├── run.bat / run.py     Windows 开发运行
+├── run.sh               macOS / Linux 一键运行（自动建 venv 装依赖）
+└── build.bat            打包 Windows exe
 ```
 
 ## 想改点东西？
@@ -83,8 +121,15 @@ gold-pet/
 | 默认单位、刷新间隔 | `gold_pet/config.py` 的 `DEFAULTS` 或设置面板 |
 | 涨红跌绿换成涨绿跌红 | `gold_pet/ui.py` 的 `UP_COLOR` / `DOWN_COLOR` |
 | 换数据源 | `gold_pet/price.py` 的 `SINA_URL` 与 `parse_snapshot` |
+| 托盘数字位数上限 | `gold_pet/tray_icon.py` 的 `MAX_DIGITS` |
+| 提醒类型与冷却时长 | `gold_pet/notifier.py` 的 `ALERT_COOLDOWN_SEC` 与 `evaluate()` |
 
-配置文件在 `%APPDATA%\GoldPet\settings.json`，可以直接手改后重启。
+配置文件位置（可直接手改后重启）：
+
+| 平台 | 路径 |
+|---|---|
+| Windows | `%APPDATA%\GoldPet\settings.json` |
+| macOS / Linux | `~/.goldpet/settings.json` |
 
 ## 移动端（Flutter）
 
@@ -100,7 +145,8 @@ flutter pub get && flutter run
 
 ## 仓库
 
-- CNB：https://cnb.cool/TJ-coding/gold-pet
+- 源码：https://cnb.cool/TJ-coding/gold-pet
+- 下载：https://cnb.cool/TJ-coding/gold-pet/-/releases
 
 ## 测试
 
@@ -148,9 +194,23 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
 ## 常见问题
 
 - **桌宠不见了**：换显示器/改分辨率后可能落在屏幕外，程序会自动回落到主屏右下角；
-  若仍找不到，删除 %APPDATA%\GoldPet\settings.json 里的 pos 后重启。
+  若仍找不到，删除配置文件里的 `pos` 字段后重启（路径见上方表格）。
 - **重复启动**：只会有一个金娘，第二次启动会提示“已经在运行了”。
 - **没有托盘**：部分环境禁用托盘，此时关窗即退出，菜单里不会出现“隐藏到托盘”。
+- **exe 被杀毒报毒**：PyInstaller 打包的常见误报，添加信任即可；根因是未做代码签名。
+- **mac/Linux 起不来**：见 [macOS / Linux 从源码运行](#macos--linux-从源码运行) 的依赖与排错表。
+
+## 平台支持
+
+| 平台 | 状态 | 说明 |
+|---|---|---|
+| Windows 10/11 x64 | ✅ 首选 | 提供免安装 exe；功能完整、已实机验证 |
+| macOS（Intel / Apple Silicon） | ✅ 源码可运行 | 需自装 Python 3.11+；未提供预编译包 |
+| Linux（X11 / Wayland） | ✅ 源码可运行 | 需装系统库（libGL 等）；Wayland 建议 `QT_QPA_PLATFORM=xcb` |
+
+**为何 mac/Linux 不提供预编译包？** 本项目的 CI 运行在 CNB 官方托管节点上，而官方节点仅提供
+Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授权限制无法在云端 CI 构建。
+故 mac/Linux 采用「源码运行」方式，体验一致，仅多一步安装 Python。
 
 ## v0.5.1 修复
 
@@ -192,12 +252,34 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
 
 ## 文档
 
+- [从源码运行（macOS / Linux 新手向）](docs/从源码运行.md)
 - [PRD](docs/PRD.md)
 - [更新日志](CHANGELOG.md)
 - [程序修改点](程序修改点.md)（代码级变更，含每个文件的改动原因）
 - [代码评审 Hy4-gold-pet-v0.3.0](docs/review/Hy4-gold-pet-v0.3.0-代码评审文档.md)
 - [产品优化方案 Hy4-gold-pet-v0.4.0](docs/product/Hy4-gold-pet-v0.4.0-产品优化方案文档.md)
 - [架构优化方案 Hy4-gold-pet-v0.4.0](docs/architecture/Hy4-gold-pet-v0.4.0-架构优化文档.md)
+
+## 发版流程（维护者）
+
+```bash
+# 1. 改版本号 gold_pet/__init__.py，补 CHANGELOG.md 与 程序修改点.md
+# 2. 质量门禁
+lint.bat
+# 3. 打包（产物 dist/黄金桌宠.exe）
+build.bat
+# 4. 准备发布包（规范命名 + 校验和）
+#    把 dist/黄金桌宠.exe 复制为 release/GoldPet-v<版本>-win64.exe
+#    生成 .sha256 校验文件
+# 5. 打 tag 并推送
+git tag v<版本> && git push origin main && git push origin --tags
+# 6. 创建 Release 后上传附件（tag 必须先有对应 Release）
+python tools/cnb_release_upload.py TJ-coding/gold-pet <release_id> release/GoldPet-v<版本>-win64.exe --tag v<版本>
+```
+
+> 上传附件走 CNB OpenAPI 三步流程：取预签名链接 → PUT 文件 → **POST** 确认。
+> 确认步骤必须用 POST（官方插件 request 默认值即 POST，用 GET 会 404）。
+> 脚本已封装：`tools/cnb_release_upload.py`。
 
 ## 开发规范
 

@@ -71,6 +71,8 @@ pip install -r requirements.txt                       # 2. 装依赖（约 200MB
 python run.py                                          # 3. 运行
 ```
 
+或者用一键脚本 `./run.sh`（自动建环境、装依赖、启动）。
+
 > 需要 **Python 3.11+**。Linux 若报 `Could not load the Qt platform plugin "xcb"`，
 > 是缺系统库 —— 具体包名见文档第四步的常见问题。
 

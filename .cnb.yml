@@ -18,7 +18,9 @@ $:
         - name: type check
           script: python -m mypy
         - name: test
-          script: python -m pytest tests --cov=gold_pet --cov-report=term-missing
+          # fail_under 在 pyproject.toml 的 [tool.coverage.report] 中定义（当前 65%）
+          script: |
+            python -m pytest tests --cov=gold_pet --cov-report=term-missing
 
   pull_request:
     - name: quality
@@ -39,4 +41,6 @@ $:
         - name: type check
           script: python -m mypy
         - name: test
-          script: python -m pytest tests --cov=gold_pet --cov-report=term-missing
+          # fail_under 在 pyproject.toml 的 [tool.coverage.report] 中定义（当前 65%）
+          script: |
+            python -m pytest tests --cov=gold_pet --cov-report=term-missing

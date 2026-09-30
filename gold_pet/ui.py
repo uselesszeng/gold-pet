@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import autostart
+from . import __version__, autostart
 from .bubble import (
     ALERT_STYLE,
     BUBBLE_STYLE,
@@ -331,13 +331,16 @@ class PetWindow(QWidget):
         self.snapshot = snap
         quote = snap.price_of(self.metal, self.unit)
         metal_name = METALS.get(self.metal, {}).get("name", "黄金")
+        show_bubble = bool(self.cfg.get("show_bubble", True))
 
         if quote is None:
             self._set_state("offline")
+            if not show_bubble:
+                return
             cache = self.service.load_cache()
             q = cache.price_of(self.metal, self.unit) if cache else None
             if q is not None:
-                self.bubble.setText(render_cache_html(metal_name, q))
+                self.bubble.setText(render_cache_html(metal_name, q, updated_at=cache.updated_at))
             else:
                 self.bubble.setText("行情获取失败")
             return
@@ -357,15 +360,16 @@ class PetWindow(QWidget):
         tips: list[str] = []
         if not snap.ok:
             tips.append('<span style="color:#ffd666">离线</span>')
-        self.bubble.setText(
-            render_price_html(
-                metal_name,
-                quote,
-                updated_at=snap.updated_at,
-                tips=tips,
-                is_market_open=is_market_open(),
+        if show_bubble:
+            self.bubble.setText(
+                render_price_html(
+                    metal_name,
+                    quote,
+                    updated_at=snap.updated_at,
+                    tips=tips,
+                    is_market_open=is_market_open(),
+                )
             )
-        )
         self._update_spark(quote, change_color(change), append=snap.ok and not silent)
 
         tray = self.tray_icon()
@@ -490,6 +494,24 @@ class PetWindow(QWidget):
         if self.snapshot is not None:
             self._render(self.snapshot, silent=True)
 
+    # ------------------------------------------------------------------ 引导
+    def welcome(self) -> None:
+        """首次运行引导：金娘自我介绍 + 托盘气泡说明交互方式。
+
+        由 main.py 在检测到首次启动（settings.json 不存在）时调用。
+        无托盘环境下只说话，不弹气泡通知。
+        """
+        self.speak("welcome")
+        tray = self.tray_icon()
+        if tray is not None and tray.isSystemTrayAvailable():
+            tray.showMessage(
+                "黄金桌宠 · 金娘来啦",
+                "左键单击 = 摸摸头 · 双击 = 立即刷新 · 拖动 = 换位置 · 右键 = 菜单",
+                QSystemTrayIcon.Information,
+                10000,
+            )
+        logging.getLogger("gold_pet").info("首次运行引导已展示")
+
     # ------------------------------------------------------------------ 交互
     def tray_icon(self):
         return getattr(self, "_tray", None)
@@ -513,6 +535,7 @@ class PetWindow(QWidget):
         self._interact_timer.start(ms)
 
     def _on_long_press(self) -> None:
+        """长按 600ms 且期间未移动 = 撒娇；已开始拖动则不触发。"""
         if self._drag_offset is not None and not self._moved:
             self._long_pressed = True
             self.shy()
@@ -550,8 +573,11 @@ class PetWindow(QWidget):
 
     def mouseMoveEvent(self, event):  # noqa: N802
         if self._drag_offset is not None and event.buttons() & Qt.LeftButton:
+            # 一旦开始拖动，就取消长按计时，避免拖动中误触发撒娇
+            if not self._moved:
+                self._moved = True
+                self._press_timer.stop()
             self.move(event.globalPosition().toPoint() - self._drag_offset)
-            self._moved = True
             event.accept()
 
     def mouseReleaseEvent(self, event):  # noqa: N802
@@ -575,38 +601,9 @@ class PetWindow(QWidget):
         event.accept()
 
     def contextMenuEvent(self, event):  # noqa: N802
-        menu = QMenu(self)
-        menu.addAction("立即刷新", self.refresh)
-        menu.addAction("切换单位（元/克 ↔ 美元/盎司）", self.toggle_unit)
-        menu.addAction(f"切换品种（当前：{METALS[self.metal]['name']}）", self.toggle_metal)
-        menu.addSeparator()
-        menu.addAction("摸摸头", self.pat)
-        menu.addAction("撒娇一下", self.shy)
-        menu.addAction("让金娘说句话", lambda: self.speak())
-        menu.addSeparator()
-
-        act_top = menu.addAction("窗口置顶")
-        act_top.setCheckable(True)
-        act_top.setChecked(bool(self.cfg.get("always_on_top", True)))
-        act_top.triggered.connect(self._toggle_top)
-
-        act_bubble = menu.addAction("显示价格气泡")
-        act_bubble.setCheckable(True)
-        act_bubble.setChecked(bool(self.cfg.get("show_bubble", True)))
-        act_bubble.triggered.connect(self._toggle_bubble)
-
-        act_spark = menu.addAction("显示迷你走势图")
-        act_spark.setCheckable(True)
-        act_spark.setChecked(bool(self.cfg.get("show_spark", True)))
-        act_spark.triggered.connect(self._toggle_spark)
-
-        menu.addSeparator()
-        menu.addSeparator()
-        menu.addAction("设置…", self.open_settings)
-        if self.tray_icon() is not None:
-            menu.addAction("隐藏到托盘", self.hide)
-        menu.addAction("退出", self.quit_app)
-        menu.exec(event.globalPos())
+        """右键菜单：与托盘菜单共用 build_menu()，避免两套代码漂移。"""
+        build_menu(self).exec(event.globalPos())
+        event.accept()
 
     def _toggle_top(self, checked: bool) -> None:
         self.cfg.set("always_on_top", checked)
@@ -636,6 +633,10 @@ class PetWindow(QWidget):
             self.bubble.setVisible(bool(self.cfg.get("show_bubble", True)))
             self.show()
             self.refresh()
+
+    def open_about(self) -> None:
+        """关于窗口：版本、数据来源、免责声明、许可。"""
+        AboutDialog(self).exec()
 
     def quit_app(self) -> None:
         self.cfg.set("pos", [self.x(), self.y()])
@@ -773,6 +774,55 @@ class SettingsDialog(QDialog):
         autostart.set_enabled(self.autostart_check.isChecked())
         self.cfg.save()
         super().accept()
+
+
+class AboutDialog(QDialog):
+    """关于窗口：版本、数据来源、免责声明、开源许可。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("关于 黄金桌宠")
+        self.setModal(True)
+        self.setMinimumWidth(360)
+
+        title = QLabel('<div style="font-size:16px;font-weight:600">🐥 黄金桌宠</div>')
+        version = QLabel(f"版本 {__version__}")
+        version.setStyleSheet("color: #666;")
+
+        body = QLabel(
+            "<div style='font-size:12px; line-height:1.7'>"
+            "一只住在桌面上的「金娘」，实时盯着金价：<br>"
+            "涨了笑、跌了哭，点一下就能看到最新价格。<br><br>"
+            "<b>数据来源</b><br>"
+            "· 国内金价：新浪财经 <code>gds_AUTD</code>（上金所 Au T+D）<br>"
+            "· 国际金价：新浪财经 <code>hf_XAU</code>（伦敦金）<br>"
+            "· 汇率：<code>fx_susdcny</code>，"
+            "换算 <code>元/克 = 美元/盎司 ÷ 31.1034768 × 汇率</code><br>"
+            "均为免密钥公开接口，可能存在延迟或中断。<br><br>"
+            "<b>免责声明</b><br>"
+            "行情数据仅供参考，<b>不构成任何投资建议</b>。<br>"
+            "本程序不采集任何个人信息，配置与历史仅存于本机。<br><br>"
+            "<b>开源许可</b><br>MIT License · "
+            "<a href='https://cnb.cool/TJ-coding/gold-pet'>cnb.cool/TJ-coding/gold-pet</a>"
+            "</div>"
+        )
+        body.setWordWrap(True)
+        body.setOpenExternalLinks(True)
+        body.setTextInteractionFlags(Qt.TextBrowserInteraction)
+
+        ok = QPushButton("知道了")
+        ok.clicked.connect(self.accept)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(ok)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(title)
+        layout.addWidget(version)
+        layout.addSpacing(4)
+        layout.addWidget(body)
+        layout.addSpacing(8)
+        layout.addLayout(buttons)
 
 
 def build_menu(window: PetWindow) -> QMenu:

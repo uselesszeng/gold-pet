@@ -208,23 +208,45 @@ def parse_snapshot(raw: dict[str, list]) -> Snapshot:
     )
 
 
+# 日盘时段（分钟数）：09:00-11:30、13:30-15:30
+_DAY_SESSIONS = ((9 * 60, 11 * 60 + 30), (13 * 60 + 30, 15 * 60 + 30))
+# 夜盘：当日 20:00 起，至次日 02:30
+_NIGHT_START = 20 * 60
+_NIGHT_END = 2 * 60 + 30
+
+
 def is_market_open(now: time.struct_time | None = None) -> bool:
     """Au(T+D) / 上海金交所是否在交易时段（按本机本地时间判断，默认东八区）。
 
-    日盘：09:00-11:30、13:30-15:30；夜盘：20:00-次日 02:30；周一至周五开盘。
+    日盘：09:00-11:30、13:30-15:30；夜盘：当日 20:00 - 次日 02:30。
+
+    夜盘归属规则（关键）：凌晨 00:00-02:30 属于**前一个交易日**的夜盘。
+    因此周一凌晨的夜盘实际是上周五夜盘，周末休市，需要单独排除；
+    周六凌晨 00:00-02:30 属于周五夜盘，仍在交易。
+
     注意：若用户时区不是东八区判断会有偏差，这里只用于气泡上的「休市」提示。
     """
     now = now or time.localtime()
-    if now.tm_wday >= 5:  # 周六、周日休市
-        return False
+    weekday = now.tm_wday  # 0=周一 … 5=周六 6=周日
     minutes = now.tm_hour * 60 + now.tm_min
-    day = ((9 * 60, 11 * 60 + 30), (13 * 60 + 30, 15 * 60 + 30))
-    night = (20 * 60, 26 * 60 + 30)  # 次日 02:30 记成 26:30
-    for start, end in day:
+
+    # 凌晨 00:00-02:30：属于「前一日」夜盘的延续
+    if minutes <= _NIGHT_END:
+        prev_weekday = (weekday - 1) % 7
+        # 前一日为周一至周五才有夜盘；周六凌晨是周五夜盘，周一凌晨是周日（无夜盘）
+        return prev_weekday < 5
+
+    # 周末白天休市
+    if weekday >= 5:
+        return False
+
+    # 日盘
+    for start, end in _DAY_SESSIONS:
         if start <= minutes <= end:
             return True
-    # 夜盘跨零点：当夜 20:00 以后，或次日 02:30 以前
-    return night[0] <= minutes <= night[1] or minutes <= 2 * 60 + 30
+
+    # 夜盘前段：当日 20:00 以后
+    return minutes >= _NIGHT_START
 
 
 class PriceService:

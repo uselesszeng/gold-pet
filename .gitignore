@@ -5,4 +5,14 @@ dist/
 *.spec
 !gold-pet.spec
 .venv/
+
+# 测试与覆盖率产物（不应入库）
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# 本地备份
+*.bak
+*.orig

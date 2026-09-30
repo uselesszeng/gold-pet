@@ -143,6 +143,16 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
 - **重复启动**：只会有一个金娘，第二次启动会提示“已经在运行了”。
 - **没有托盘**：部分环境禁用托盘，此时关窗即退出，菜单里不会出现“隐藏到托盘”。
 
+## v0.4.1 修复
+
+- **首次启动崩溃**：`welcome()` 此前未实现，首次运行必崩 → 现已实现引导
+- **「关于」菜单报错**：`open_about()` 此前未实现 → 现已实现关于窗口
+- **菜单统一**：右键菜单现与托盘菜单完全一致（此前右键缺「关于」）
+- **交易时段判断**：修正夜盘跨零点归属（周六上午、周一凌晨此前被误判为开市）
+- **拖动误触发撒娇**：拖动超过 0.6 秒不再弹出撒娇动画
+- **缓存时效提示**：离线时显示「缓存于 xx:xx」，超 1 小时提示已过期
+- 测试 33 → 85 条，覆盖率 52% → 72%，覆盖率门禁 65% 已落到 CI
+
 ## v0.4 新增
 
 - **到价提醒**：设置里填「≥ 目标价」「≤ 目标价」（元/克），触发时金娘说话 + 系统通知
@@ -154,6 +164,8 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
 ## 文档
 
 - [PRD](docs/PRD.md)
+- [更新日志](CHANGELOG.md)
+- [程序修改点](程序修改点.md)（代码级变更，含每个文件的改动原因）
 - [代码评审 Hy4-gold-pet-v0.3.0](docs/review/Hy4-gold-pet-v0.3.0-代码评审文档.md)
 - [产品优化方案 Hy4-gold-pet-v0.4.0](docs/product/Hy4-gold-pet-v0.4.0-产品优化方案文档.md)
 - [架构优化方案 Hy4-gold-pet-v0.4.0](docs/architecture/Hy4-gold-pet-v0.4.0-架构优化文档.md)
@@ -172,3 +184,4 @@ python -m pytest tests --cov=gold_pet --cov-report=term-missing
 ```
 
 CI（.cnb.yml）在 push / PR 时自动跑：lint → 类型检查 → 测试 + 覆盖率。
+覆盖率门禁 65%，配置在 `pyproject.toml` 的 `[tool.coverage.report] fail_under`。

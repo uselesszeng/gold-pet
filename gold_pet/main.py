@@ -42,6 +42,30 @@ def setup_logging(level: str = "INFO") -> None:
     sys.excepthook = excepthook
 
 
+def _ensure_utf8_stdout() -> None:
+    r"""让控制台输出用 UTF-8，避免打包后中文变乱码。
+
+    PyInstaller --noconsole 打包出的 exe 在 Windows 上 sys.stdout.encoding 常为
+    cp936(GBK)，打印中文（如 --version）会显示成「»Æ½ð×À³è」。这里显式重设为 UTF-8，
+    并在 Windows 上一并切换控制台代码页；失败时静默忽略（不影响主流程）。
+    """
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        except Exception:
+            pass
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="黄金桌宠", description="桌面实时金价挂件")
     p.add_argument("--once", action="store_true", help="只拉取一次行情并打印，不启动界面")
@@ -71,6 +95,7 @@ def run_once(args: argparse.Namespace, cfg: Config) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _ensure_utf8_stdout()
     args = parse_args(argv)
     setup_logging(args.log_level)
     log = logging.getLogger("gold_pet")

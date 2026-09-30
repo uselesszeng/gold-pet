@@ -281,9 +281,13 @@ class PriceService:
 
 
 class HistoryStore:
-    """价格历史（用于迷你走势图），每个品种+单位最多保留 max_points 条。"""
+    """价格历史（用于迷你走势图），每个品种+单位最多保留 max_points 条。
 
-    def __init__(self, path: Path, max_points: int = 120):
+    v0.5 起上限由 120 提升到 1440：按 60 秒刷新计算约覆盖 24 小时，
+    这样走势图的「今日」「全部」范围才有足够数据点。
+    """
+
+    def __init__(self, path: Path, max_points: int = 1440):
         self.path = Path(path)
         self.max_points = max_points
         self.path.parent.mkdir(parents=True, exist_ok=True)

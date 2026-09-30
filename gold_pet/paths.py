@@ -45,6 +45,11 @@ def history_path() -> Path:
     return app_dir() / "history.json"
 
 
+def alert_history_path() -> Path:
+    """提醒历史（v0.5 提醒中心）。"""
+    return app_dir() / "alert_history.json"
+
+
 def log_path() -> Path:
     return app_dir() / "gold-pet.log"
 

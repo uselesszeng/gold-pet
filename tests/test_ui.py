@@ -44,7 +44,15 @@ def _window(app, tmp_path, cfg=None):
     cfg = cfg or Config()
     svc = PriceService(tmp_path / "last.json")
     hist = HistoryStore(tmp_path / "history.json")
-    w = PetWindow(cfg, svc, hist, auto_refresh=False)  # 测试不联网
+    # 提醒历史必须落到 tmp_path：否则会写进真实用户目录（%APPDATA%\GoldPet），
+    # 既污染用户数据又让跨用例历史累积、断言失真。
+    w = PetWindow(
+        cfg,
+        svc,
+        hist,
+        auto_refresh=False,  # 测试不联网
+        notifier_history_path=tmp_path / "alert_history.json",
+    )
     w.show()
     return w
 
@@ -99,20 +107,139 @@ def test_offline_state(app, tmp_path):
 
 
 def test_target_alert_triggers(app, tmp_path):
-
+    """到价提醒已迁移到 Notifier（v0.5），此处验证界面侧接线正确。"""
     cfg = Config()
     cfg.set("target_low", 900.0)  # 现价 897.15 应触发
     w = _window(app, tmp_path, cfg=cfg)
-    w._render(parse_snapshot(RAW), silent=True)  # silent 不触发，下面手动调用
-    w._last_target_at = 0.0
-    quote = w.snapshot.price_of("gold", "cny_g")
-    w._maybe_target(quote)
-    assert w._last_target_side == "low"
+    snap = parse_snapshot(RAW)
+    w._render(snap, silent=True)
 
-    # 冷却期内不重复提醒
-    before = w._last_target_side
-    w._maybe_target(quote)
-    assert w._last_target_side == before
+    quote = snap.price_of("gold", "cny_g")
+    alerts = w.notifier.evaluate(quote, "黄金", base_quote=quote)
+    kinds = {a.kind for a in alerts}
+    assert "target" in kinds
+    target = next(a for a in alerts if a.kind == "target")
+    assert target.side == "low"
+
+    # 冷却期内同方向不重复
+    again = w.notifier.evaluate(quote, "黄金", base_quote=quote)
+    assert not any(a.kind == "target" for a in again)
+
+
+def test_dispatch_alerts_writes_history(app, tmp_path):
+    """_dispatch_alerts 应把提醒写入历史并高亮气泡。"""
+    from gold_pet.notifier import Alert
+
+    w = _window(app, tmp_path)
+    alert = Alert(kind="pct", side="up", title="t", body="黄金价上涨 1.00%")
+    w._dispatch_alerts([alert])
+    assert len(w.notifier.history()) == 1
+    assert w.notifier.history()[0].body == "黄金价上涨 1.00%"
+
+
+def test_quiet_hours_silences_notification(app, tmp_path):
+    """勿扰时段内应跳过系统通知，但仍记录历史（气泡台词照常）。"""
+    from gold_pet.notifier import Alert
+
+    cfg = Config()
+    cfg.set("dnd_enabled", True)
+    cfg.set("dnd_start", "00:00")
+    cfg.set("dnd_end", "23:59")  # 全天勿扰
+    w = _window(app, tmp_path, cfg=cfg)
+
+    sent: list = []
+
+    class _FakeTray:
+        def showMessage(self, *args):  # noqa: N802
+            sent.append(args)
+
+    w.attach_tray(_FakeTray())
+    w._dispatch_alerts([Alert(kind="pct", side="up", title="t", body="b")])
+    assert sent == []  # 未发通知
+    assert len(w.notifier.history()) == 1  # 但历史已记录
+
+
+def test_spark_range_switch(app, tmp_path):
+    """走势图范围切换应写入配置并重绘，不影响价格显示。"""
+    cfg = Config()
+    w = _window(app, tmp_path, cfg=cfg)
+    w._render(parse_snapshot(RAW), silent=True)
+
+    w.set_spark_range("all")
+    assert cfg.get("spark_range") == "all"
+    assert "897.15" in w.bubble.text()
+
+    w.set_spark_range("不合法范围")  # 非法值应被忽略
+    assert cfg.get("spark_range") == "all"
+
+
+def test_alert_history_dialog_construct(app, tmp_path):
+    from gold_pet.notifier import Alert
+    from gold_pet.ui import AlertHistoryDialog
+
+    w = _window(app, tmp_path)
+    w.notifier.record([Alert(kind="pct", side="up", title="t", body="黄金上涨")])
+    dlg = AlertHistoryDialog(w.notifier, None)
+    assert dlg.list.count() == 1
+    assert "黄金上涨" in dlg.list.item(0).text()
+
+
+def test_notifier_history_path_is_injectable(app, tmp_path):
+    """回归：PetWindow 的提醒历史落盘路径必须可注入。
+
+    此前 Notifier 固定取 alert_history_path()（真实 %APPDATA% 目录），
+    导致测试写入用户真实数据，且跨用例历史累积、断言失真。
+    """
+    from gold_pet.paths import alert_history_path
+
+    w = _window(app, tmp_path)
+    assert w.notifier.history_path == tmp_path / "alert_history.json"
+    assert w.notifier.history_path != alert_history_path()
+
+
+def test_window_does_not_write_real_alert_history(app, tmp_path, monkeypatch):
+    """回归：构造窗口并记录提醒后，真实用户目录不得被写入。"""
+    import gold_pet.ui as ui_mod
+    from gold_pet.notifier import Alert
+
+    touched: list = []
+    monkeypatch.setattr(ui_mod, "alert_history_path", lambda: touched.append(1))
+
+    w = _window(app, tmp_path)
+    w.notifier.record([Alert(kind="pct", side="up", title="t", body="x")])
+    assert touched == []  # 显式传入路径时不应回落到真实路径
+
+
+def test_settings_dialog_has_new_controls(app, tmp_path):
+    """v0.5 设置面板应包含提醒开关、勿扰与走势范围。"""
+    from gold_pet.ui import SettingsDialog
+
+    dlg = SettingsDialog(Config(), None)
+    for attr in (
+        "pct_enabled_check",
+        "target_enabled_check",
+        "extreme_enabled_check",
+        "dnd_check",
+        "dnd_start_spin",
+        "dnd_end_spin",
+        "spark_range_combo",
+        "tray_price_check",
+    ):
+        assert hasattr(dlg, attr), attr
+
+
+def test_tray_icon_renders_number(app, tmp_path):
+    """托盘数字图标应按价格渲染；位数过长时回退。"""
+    from gold_pet.tray_icon import render_price_icon, tray_text
+
+    assert tray_text(901.75) == "901"
+    assert tray_text(14.801) == "14"
+    assert tray_text(12345.0) == ""  # 5 位放不下
+    assert tray_text(0) == ""
+
+    icon = render_price_icon(901.75, change=1.0)
+    assert icon is not None and not icon.isNull()
+    assert render_price_icon(12345.0, change=1.0) is None
 
 
 def test_market_status_tag_in_bubble(app, tmp_path, monkeypatch):

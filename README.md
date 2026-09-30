@@ -66,7 +66,7 @@ build.bat
 ```
 gold-pet/
 ├── docs/PRD.md          产品需求文档
-├── gold_pet/            源码（config / price / ui / autostart / main）
+├── gold_pet/            源码（config / price / notifier / tray_icon / ui / autostart / main）
 ├── assets/pet/*.png     动画帧（tools/gen_assets.py 生成）
 ├── assets/icon.ico      应用图标
 ├── tools/gen_assets.py  素材生成脚本（改配色/表情后重跑）
@@ -110,7 +110,16 @@ python -m pytest tests -q
 ```
 
 覆盖：行情解析（三个品种、单位换算、缩放）、缓存与损坏兜底、历史去重与上限、
-配置读写与素材完整性、UI 渲染 / 单位与品种切换 / 摸头撒娇 / 台词恢复 / 离线状态 / 失败退避。
+配置读写与素材完整性、提醒规则与勿扰时段、托盘数字图标渲染、
+UI 渲染 / 单位与品种切换 / 摸头撒娇 / 台词恢复 / 离线状态 / 失败退避。
+
+质量门禁（与 CI 一致，Windows 直接跑 `lint.bat`）：
+
+```bash
+python -m ruff check .
+python -m mypy                 # 注意：用裸 mypy，files 白名单在 pyproject.toml
+python -m pytest tests --cov=gold_pet --cov-report=term-missing
+```
 
 ## 调试与日志
 
@@ -142,6 +151,18 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
   若仍找不到，删除 %APPDATA%\GoldPet\settings.json 里的 pos 后重启。
 - **重复启动**：只会有一个金娘，第二次启动会提示“已经在运行了”。
 - **没有托盘**：部分环境禁用托盘，此时关窗即退出，菜单里不会出现“隐藏到托盘”。
+
+## v0.5 新增
+
+- **提醒中心**：涨跌幅 / 到价 / 新高新低三类提醒各自独立开关，冷却去重后才会再次提醒
+- **提醒历史**：每次触发都记录时间、类型与内容，菜单「提醒历史…」可查看，保留最近 200 条
+- **勿扰模式**：设定一段静音时段（支持跨零点，如 23:00–08:00），时段内只静音系统通知，
+  金娘的气泡与台词照常
+- **走势图时间范围**：迷你走势图可切换「1 小时 / 今日 / 全部」；价格历史上限 120 → 1440 条
+  （按 60 秒刷新约覆盖 24 小时）
+- **托盘图标显示价格**：托盘图标直接画出当前价格整数部分（如 `901`）并按涨跌着色，
+  完整精度仍在悬停提示中；可在设置里关闭
+- 测试 85 → 138 条，覆盖率 72% → 77.29%
 
 ## v0.4.1 修复
 

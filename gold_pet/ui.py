@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 import random
 import time
+from pathlib import Path
 
-from PySide6.QtCore import QPoint, QPointF, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QPoint, QPointF, Qt, QThread, QTime, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -17,11 +18,13 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QListWidget,
     QMenu,
     QPushButton,
     QSlider,
     QSpinBox,
     QSystemTrayIcon,
+    QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -37,8 +40,9 @@ from .bubble import (
     render_line_html,
     render_price_html,
 )
-from .config import INTERVAL_CHOICES, Config
-from .paths import asset_dir
+from .config import INTERVAL_CHOICES, SPARK_RANGE_NAMES, Config
+from .notifier import Alert, Notifier, filter_series
+from .paths import alert_history_path, asset_dir
 from .price import METALS, Snapshot, is_market_open
 
 # 每种状态的帧数与播放间隔（毫秒）
@@ -146,7 +150,14 @@ class SparkLine(QWidget):
 class PetWindow(QWidget):
     """桌宠主窗口：透明置顶、可拖动、头顶挂价格气泡。"""
 
-    def __init__(self, cfg: Config, service, history=None, auto_refresh: bool = True):
+    def __init__(
+        self,
+        cfg: Config,
+        service,
+        history=None,
+        auto_refresh: bool = True,
+        notifier_history_path: Path | None = None,
+    ):
         super().__init__()
         self.cfg = cfg
         self.service = service
@@ -160,8 +171,6 @@ class PetWindow(QWidget):
         self._drag_offset = None
         self._press_at = 0.0
         self._moved = False
-        self._last_alert_at = 0.0
-        self._last_alert_side = ""
         self._speak_timer = QTimer(self)
         self._speak_timer.setSingleShot(True)
         self._speak_timer.timeout.connect(self._restore_price)
@@ -172,14 +181,19 @@ class PetWindow(QWidget):
         self._interact_timer.setSingleShot(True)
         self._interact_timer.timeout.connect(self._end_interact)
         self._long_pressed = False
-        self._last_extreme_at = 0.0
-        self._last_extreme_side = ""
-        self._last_target_at = 0.0
-        self._last_target_side = ""
         self._fail_streak = 0
         self._retry_timer = QTimer(self)
         self._retry_timer.setSingleShot(True)
         self._retry_timer.timeout.connect(self.refresh)
+
+        # v0.5：提醒规则、冷却与历史统一交给 Notifier（纯逻辑，可单测）
+        # 落盘路径可注入：测试与多实例场景不应写到真实用户目录
+        self.notifier = Notifier(
+            cfg,
+            notifier_history_path if notifier_history_path is not None else alert_history_path(),
+        )
+        # 默认托盘图标（数字图标渲染不出来时回退用）
+        self._base_tray_icon: QIcon | None = None
 
         self._load_frames()
         self._build_ui()
@@ -346,7 +360,6 @@ class PetWindow(QWidget):
             return
 
         change = quote.change
-        pct = quote.change_pct
         if not snap.ok:
             self._set_state("offline")
         elif change > 0:
@@ -378,10 +391,47 @@ class PetWindow(QWidget):
                 f"黄金桌宠 {metal_name} {quote.format_price()} {quote.unit} "
                 f"{change_arrow(change)}{change:+.2f}"
             )
+            self._update_tray_icon(quote)
         if not silent and snap.ok:
-            self._maybe_alert(pct)
-            self._maybe_extreme(quote)
-            self._maybe_target(quote)
+            base = quote if quote.unit.startswith("元") else None
+            if base is None and self.snapshot is not None:
+                base = self.snapshot.price_of(self.metal, "cny_g")
+            self._dispatch_alerts(self.notifier.evaluate(quote, metal_name, base_quote=base))
+
+    def _dispatch_alerts(self, alerts: list[Alert]) -> None:
+        """把规则层产出的提醒落到界面：气泡高亮 + 金娘说话 + 系统通知。
+
+        勿扰时段内只静音系统通知，气泡与台词照常（用户可在设置里关闭勿扰）。
+        """
+        if not alerts:
+            return
+        self.notifier.record(alerts)
+        quiet = self.notifier.in_quiet_hours()
+        tray = self.tray_icon()
+        for alert in alerts:
+            self.bubble.setStyleSheet(ALERT_STYLE)
+            QTimer.singleShot(8000, lambda: self.bubble.setStyleSheet(BUBBLE_STYLE))
+            # 台词方向：涨/新高 → high，跌/新低 → low
+            self.speak("high" if alert.side in ("up", "high") else "low")
+            if tray is not None and not quiet:
+                tray.showMessage(alert.title, alert.body, QSystemTrayIcon.Information, 8000)
+            logging.getLogger("gold_pet").info("触发提醒[%s]: %s", alert.kind, alert.body)
+        if quiet:
+            logging.getLogger("gold_pet").info("勿扰时段，已静音 %d 条系统通知", len(alerts))
+
+    def _update_tray_icon(self, quote) -> None:
+        """托盘图标按当前价格渲染数字；拿不到可显示的数字时退回默认图标。"""
+        tray = self.tray_icon()
+        if tray is None:
+            return
+        if not bool(self.cfg.get("tray_show_price", True)):
+            if self._base_tray_icon is not None:
+                tray.setIcon(self._base_tray_icon)
+            return
+        from .tray_icon import render_fallback_icon, render_price_icon
+
+        icon = render_price_icon(quote.price, quote.change)
+        tray.setIcon(icon if icon is not None else render_fallback_icon(self._base_tray_icon))
 
     def _update_spark(self, quote, color: str, append: bool = False) -> None:
         """更新迷你走势图；append=True 才落盘（只在联网刷新成功时写，减少磁盘写入）。"""
@@ -393,93 +443,12 @@ class PetWindow(QWidget):
             series = self.history.append(self.metal, self.unit, quote.price)
         else:
             series = self.history.series(self.metal, self.unit)
-        values = [p.get("p", 0.0) for p in series][-60:]
+        # v0.5：按配置的时间范围过滤（1 小时 / 今日 / 全部）
+        range_key = self.cfg.get("spark_range", "1h")
+        values = filter_series(series, range_key)
+        if not values:  # 范围内无点时退回原始序列末尾，避免图空着
+            values = [p.get("p", 0.0) for p in series][-60:]
         self.spark.set_series(values, color)
-
-    def _maybe_target(self, quote) -> None:
-        """到价提醒：以元/克为基准（与当前显示单位无关）。"""
-        high = float(self.cfg.get("target_high", 0.0))
-        low = float(self.cfg.get("target_low", 0.0))
-        if high <= 0 and low <= 0:
-            return
-        base = quote if quote.unit.startswith("元") else None
-        if base is None and self.snapshot is not None:
-            base = self.snapshot.price_of(self.metal, "cny_g")
-        if base is None:
-            return
-        now = time.time()
-        cooldown = self._cooldown_sec()
-        if high > 0 and base.price >= high:
-            side, text = "high", f"金价已涨到 {base.price:.2f} 元/克（目标 {high:.2f}）"
-        elif low > 0 and base.price <= low:
-            side, text = "low", f"金价已跌到 {base.price:.2f} 元/克（目标 {low:.2f}）"
-        else:
-            return
-        if now - self._last_target_at < cooldown and side == self._last_target_side:
-            return
-        self._last_target_at = now
-        self._last_target_side = side
-        self.speak("high" if side == "high" else "low")
-        tray = self.tray_icon()
-        if tray is not None:
-            tray.showMessage("黄金桌宠 · 到价提醒", text, QSystemTrayIcon.Information, 8000)
-
-    def _cooldown_sec(self) -> int:
-        return int(self.cfg.get("alert_cooldown_sec", 600))
-
-    def _maybe_alert(self, pct: float) -> None:
-        threshold = float(self.cfg.get("alert_pct", 0.5))
-        if threshold <= 0 or abs(pct) < threshold:
-            return
-        now = time.time()
-        side = "up" if pct > 0 else "down"
-        cooldown = self._cooldown_sec()
-        if now - self._last_alert_at < cooldown and side == self._last_alert_side:
-            return
-        self._last_alert_at = now
-        self._last_alert_side = side
-        self.bubble.setStyleSheet(ALERT_STYLE)
-        QTimer.singleShot(8000, lambda: self.bubble.setStyleSheet(BUBBLE_STYLE))
-        # 触发提醒时顺便让金娘说句话（同一提醒 10 分钟内只说一次）
-        self.speak(side)
-        tray = self.tray_icon()
-        if tray is not None:
-            metal_name = METALS.get(self.metal, {}).get("name", "黄金")
-            tray.showMessage(
-                "黄金桌宠提醒",
-                f"{metal_name}价{'上涨' if pct > 0 else '下跌'} {abs(pct):.2f}%，"
-                f"已超过设定阈值 {threshold:.2f}%",
-                QSystemTrayIcon.Information,
-                8000,
-            )
-
-    def _maybe_extreme(self, quote) -> None:
-        """创新高 / 创新低提醒（同一方向 10 分钟内只提醒一次）。"""
-        if quote.high <= 0 and quote.low <= 0:
-            return
-        if quote.high > 0 and quote.price >= quote.high:
-            side, title = "high", "创新高"
-        elif quote.low > 0 and quote.price <= quote.low:
-            side, title = "low", "创新低"
-        else:
-            return
-        now = time.time()
-        cooldown = self._cooldown_sec()
-        if now - self._last_extreme_at < cooldown and side == self._last_extreme_side:
-            return
-        self._last_extreme_at = now
-        self._last_extreme_side = side
-        metal_name = METALS.get(self.metal, {}).get("name", "黄金")
-        self.speak(side)
-        tray = self.tray_icon()
-        if tray is not None:
-            tray.showMessage(
-                "黄金桌宠提醒",
-                f"{metal_name}{title}：{quote.format_price()} {quote.unit}"
-                f"（今日高 {quote.high:.2f} / 低 {quote.low:.2f}）",
-                QSystemTrayIcon.Information,
-                8000,
-            )
 
     # ------------------------------------------------------------------ 台词
     def speak(self, mood: str | None = None) -> None:
@@ -638,6 +607,22 @@ class PetWindow(QWidget):
         """关于窗口：版本、数据来源、免责声明、许可。"""
         AboutDialog(self).exec()
 
+    def open_alert_history(self) -> None:
+        """提醒历史窗口（v0.5 提醒中心）。"""
+        AlertHistoryDialog(self.notifier, self).exec()
+
+    def set_spark_range(self, range_key: str) -> None:
+        """切换走势图时间范围并立即重绘（v0.5）。"""
+        if range_key not in SPARK_RANGE_NAMES:
+            return
+        self.cfg.set("spark_range", range_key)
+        self.cfg.save()
+        if self.snapshot is not None:
+            self._render(self.snapshot, silent=True)
+        logging.getLogger("gold_pet").info(
+            "走势图范围切换为 %s", SPARK_RANGE_NAMES.get(range_key, range_key)
+        )
+
     def quit_app(self) -> None:
         self.cfg.set("pos", [self.x(), self.y()])
         self.cfg.save()
@@ -731,19 +716,63 @@ class SettingsDialog(QDialog):
         self.autostart_check = QCheckBox("开机自动启动")
         self.autostart_check.setChecked(autostart.is_enabled())
 
+        # ---- v0.5 提醒中心：三类提醒独立开关 ----
+        self.pct_enabled_check = QCheckBox("启用涨跌幅提醒")
+        self.pct_enabled_check.setChecked(bool(cfg.get("alert_pct_enabled", True)))
+
+        self.target_enabled_check = QCheckBox("启用到价提醒")
+        self.target_enabled_check.setChecked(bool(cfg.get("alert_target_enabled", True)))
+
+        self.extreme_enabled_check = QCheckBox("启用新高新低提醒")
+        self.extreme_enabled_check.setChecked(bool(cfg.get("alert_extreme_enabled", True)))
+
+        # ---- v0.5 勿扰模式 ----
+        self.dnd_check = QCheckBox("勿扰模式（时段内不弹系统通知）")
+        self.dnd_check.setChecked(bool(cfg.get("dnd_enabled", False)))
+
+        self.dnd_start_spin = QTimeEdit()
+        self.dnd_start_spin.setDisplayFormat("HH:mm")
+        self.dnd_start_spin.setTime(_parse_qtime(cfg.get("dnd_start", "23:00")))
+
+        self.dnd_end_spin = QTimeEdit()
+        self.dnd_end_spin.setDisplayFormat("HH:mm")
+        self.dnd_end_spin.setTime(_parse_qtime(cfg.get("dnd_end", "08:00")))
+
+        # ---- v0.5 走势范围与托盘数字 ----
+        self.spark_range_combo = QComboBox()
+        for key, label in SPARK_RANGE_NAMES.items():
+            self.spark_range_combo.addItem(label, key)
+        idx_range = self.spark_range_combo.findData(cfg.get("spark_range", "1h"))
+        self.spark_range_combo.setCurrentIndex(max(0, idx_range))
+
+        self.tray_price_check = QCheckBox("托盘图标显示价格数字")
+        self.tray_price_check.setChecked(bool(cfg.get("tray_show_price", True)))
+
         form = QFormLayout()
         form.addRow("关注品种", self.metal_combo)
         form.addRow("默认单位", self.unit_combo)
         form.addRow("刷新间隔", self.interval_combo)
-        form.addRow("涨跌提醒阈值", self.alert_spin)
-        form.addRow("同类提醒冷却", self.cooldown_spin)
-        form.addRow("到价提醒 ≥（0 关闭）", self.target_high_spin)
-        form.addRow("到价提醒 ≤（0 关闭）", self.target_low_spin)
         form.addRow("不透明度", self.opacity_slider)
         form.addRow("", self.top_check)
         form.addRow("", self.bubble_check)
         form.addRow("", self.spark_check)
+        form.addRow("走势图范围", self.spark_range_combo)
+        form.addRow("", self.tray_price_check)
         form.addRow("", self.autostart_check)
+
+        alert_form = QFormLayout()
+        alert_form.addRow("涨跌提醒阈值", self.alert_spin)
+        alert_form.addRow("同类提醒冷却", self.cooldown_spin)
+        alert_form.addRow("到价提醒 ≥（0 关闭）", self.target_high_spin)
+        alert_form.addRow("到价提醒 ≤（0 关闭）", self.target_low_spin)
+        alert_form.addRow("", self.pct_enabled_check)
+        alert_form.addRow("", self.target_enabled_check)
+        alert_form.addRow("", self.extreme_enabled_check)
+
+        dnd_form = QFormLayout()
+        dnd_form.addRow("", self.dnd_check)
+        dnd_form.addRow("勿扰开始", self.dnd_start_spin)
+        dnd_form.addRow("勿扰结束", self.dnd_end_spin)
 
         ok = QPushButton("保存")
         cancel = QPushButton("取消")
@@ -755,7 +784,13 @@ class SettingsDialog(QDialog):
         buttons.addWidget(ok)
 
         layout = QVBoxLayout(self)
+        layout.addWidget(_section_label("基本"))
         layout.addLayout(form)
+        layout.addWidget(_section_label("提醒中心"))
+        layout.addLayout(alert_form)
+        layout.addWidget(_section_label("勿扰模式"))
+        layout.addLayout(dnd_form)
+        layout.addSpacing(4)
         layout.addLayout(buttons)
 
     def accept(self):  # noqa: D102
@@ -771,9 +806,76 @@ class SettingsDialog(QDialog):
         self.cfg.set("show_bubble", self.bubble_check.isChecked())
         self.cfg.set("show_spark", self.spark_check.isChecked())
         self.cfg.set("autostart", self.autostart_check.isChecked())
+        # v0.5
+        self.cfg.set("alert_pct_enabled", self.pct_enabled_check.isChecked())
+        self.cfg.set("alert_target_enabled", self.target_enabled_check.isChecked())
+        self.cfg.set("alert_extreme_enabled", self.extreme_enabled_check.isChecked())
+        self.cfg.set("dnd_enabled", self.dnd_check.isChecked())
+        self.cfg.set("dnd_start", self.dnd_start_spin.time().toString("HH:mm"))
+        self.cfg.set("dnd_end", self.dnd_end_spin.time().toString("HH:mm"))
+        self.cfg.set("spark_range", self.spark_range_combo.currentData())
+        self.cfg.set("tray_show_price", self.tray_price_check.isChecked())
         autostart.set_enabled(self.autostart_check.isChecked())
         self.cfg.save()
         super().accept()
+
+
+def _section_label(text: str) -> QLabel:
+    """设置面板里的分组标题。"""
+    label = QLabel(text)
+    label.setStyleSheet("font-weight: 600; color: #b8860b; padding-top: 6px;")
+    return label
+
+
+def _parse_qtime(text: str) -> QTime:
+    """把 "HH:MM" 解析为 QTime；非法则回落 00:00。"""
+    from .notifier import parse_hhmm
+
+    minutes = parse_hhmm(text)
+    if minutes is None:
+        return QTime(0, 0)
+    return QTime(minutes // 60, minutes % 60)
+
+
+class AlertHistoryDialog(QDialog):
+    """提醒历史窗口（v0.5 提醒中心）。"""
+
+    def __init__(self, notifier: Notifier, parent=None):
+        super().__init__(parent)
+        self.notifier = notifier
+        self.setWindowTitle("提醒历史")
+        self.setModal(True)
+        self.setMinimumSize(420, 320)
+
+        self.list = QListWidget()
+        self._reload()
+
+        clear = QPushButton("清空历史")
+        clear.clicked.connect(self._clear)
+        close = QPushButton("关闭")
+        close.clicked.connect(self.accept)
+        buttons = QHBoxLayout()
+        buttons.addWidget(clear)
+        buttons.addStretch(1)
+        buttons.addWidget(close)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.list)
+        layout.addLayout(buttons)
+
+    def _reload(self) -> None:
+        self.list.clear()
+        items = self.notifier.history()
+        if not items:
+            self.list.addItem("暂无提醒记录")
+            return
+        for alert in items:
+            clock = time.strftime("%m-%d %H:%M:%S", time.localtime(alert.at))
+            self.list.addItem(f"[{clock}] {alert.kind_name}｜{alert.body}")
+
+    def _clear(self) -> None:
+        self.notifier.clear_history()
+        self._reload()
 
 
 class AboutDialog(QDialog):
@@ -852,7 +954,16 @@ def build_menu(window: PetWindow) -> QMenu:
     act_spark.setChecked(bool(window.cfg.get("show_spark", True)))
     act_spark.triggered.connect(window._toggle_spark)
 
+    # v0.5：走势图时间范围子菜单（1 小时 / 今日 / 全部）
+    range_menu = menu.addMenu("走势图范围")
+    for key, label in SPARK_RANGE_NAMES.items():
+        act = range_menu.addAction(label)
+        act.setCheckable(True)
+        act.setChecked(window.cfg.get("spark_range", "1h") == key)
+        act.triggered.connect(lambda _checked=False, k=key: window.set_spark_range(k))
+
     menu.addSeparator()
+    menu.addAction("提醒历史…", window.open_alert_history)
     menu.addAction("设置…", window.open_settings)
     menu.addAction("关于…", window.open_about)
     if window.tray_icon() is not None:
@@ -870,6 +981,8 @@ def build_tray(window: PetWindow, cfg: Config) -> QSystemTrayIcon | None:
     icon = QIcon(str(icon_path)) if icon_path.exists() else QIcon()
     tray = QSystemTrayIcon(icon, window)
     tray.setToolTip("黄金桌宠")
+    # 记住默认图标，供数字图标渲染失败时回退
+    window._base_tray_icon = icon
 
     menu = build_menu(window)
     show_act = menu.addAction("显示/隐藏")

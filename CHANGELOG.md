@@ -5,6 +5,47 @@
 
 ---
 
+## [0.5.2] - 2026-09-30
+
+**主题：Windows 免安装包发布 + macOS / Linux 源码支持文档**
+
+本版不改变程序功能，聚焦「别人拿到链接能不能装上跑起来」。
+
+### 新增
+
+- **Windows 免安装 exe 正式发布到 Release**
+  下载地址：https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.1/GoldPet-v0.5.1-win64.exe
+  附带 `.sha256` 校验文件。此前仓库只有源码，他人拿到链接**无法直接使用**。
+- **`README.md` 新增「下载安装」章节**：三大平台下载方式一览，
+  含 Windows 首次运行的 4 条提示（SmartScreen、杀软误报、不进任务栏、右键菜单）。
+- **`README.md` 新增「macOS / Linux 从源码运行」章节**：面向新手的四步指南
+  （确认 Python 版本 → 获取代码 → 建虚拟环境装依赖 → 运行），
+  覆盖各发行版安装命令、Linux 系统库依赖、Wayland 排错、中文乱码等 5 类常见问题，
+  并给出 macOS 打包 `.app` 的方法。
+- **`run.sh`**：macOS / Linux 一键启动脚本，首次运行自动建 venv 并装依赖。
+- **`README.md` 新增「平台支持」表格**：明确 Windows 首选的定位，
+  并解释 mac/Linux 为何只提供源码（CNB 官方托管节点仅 Linux）。
+
+### 变更
+
+- **`.cnb.yml` 新增 `tag_push` 流水线**：打 tag 时自动把 `release/` 目录下的
+  exe 与 sha256 挂到同名 Release 附件，省去手工上传。
+  前置条件是该 tag 已存在对应 Release。
+
+### 工程
+
+- 新增 `tools/cnb_release_upload.py`：命令行上传文件到 CNB Release 附件，
+  封装官方未公开的三步流程（取预签名 URL → PUT 直传 → 确认回调）。
+- 版本号 0.5.1 → 0.5.2。
+
+### 已知限制
+
+- mac/Linux **未提供**预编译包，需用户装 Python；这是 CNB 云 CI 平台能力的限制，
+  非代码限制（PySide6 本身三平台通吃）。
+- Windows exe 未做代码签名，首次运行会有 SmartScreen 提示。
+
+---
+
 ## [0.5.1] - 2026-09-30
 
 **主题：修复设置面板撑满屏幕与桌宠贴边**

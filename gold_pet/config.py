@@ -33,7 +33,7 @@ DEFAULTS: dict = {
     "spark_range": "1h",
     # 动作活跃度：quiet = 安静(帧间隔×3) / normal = 标准 / lively = 活泼(×0.7)
     "activity_level": "normal",
-    # 关怀提醒（v0.7）：只走金娘气泡，不弹系统通知、不进提醒中心
+    # 关怀提醒（v0.7）：只走鲸娘气泡，不弹系统通知、不进提醒中心
     "care_drink_enabled": True,  # 喝水提醒（默认开）
     "care_drink_interval_min": 60,
     "care_posture_enabled": False,  # 久坐提醒

@@ -18,7 +18,13 @@ except Exception as exc:  # 无显示环境 / 缺系统库时跳过 UI 测试
 
 from gold_pet.config import Config  # noqa: E402
 from gold_pet.price import HistoryStore, PriceService, parse_snapshot  # noqa: E402
-from gold_pet.ui import LINES, STATES, PetWindow  # noqa: E402
+from gold_pet.ui import (  # noqa: E402
+    FATTY_LINES,
+    LINES,
+    STATES,
+    PetWindow,
+    pick_fatty_line,
+)
 
 RAW = {
     "gds_AUTD": "897.15,0,896.03,897.25,902.00,889.24,15:29:54,900.37,897.00,45270,2,7,2026-09-29,黄金延期".split(
@@ -422,8 +428,8 @@ def test_drag_to_right_edge_keeps_window_inside_screen(app, tmp_path):
     """回归：拖动到屏幕右边缘会「卡半边」。
 
     根因是 mouseMoveEvent 直接 move(鼠标位置 - 拖拽偏移)，没有任何夹取。
-    窗口实测 176×239（气泡在金娘上方，比金娘本体高 79px），
-    拖到最右时右边界会超出屏幕 155px，气泡文字与金娘右半边被裁掉。
+    窗口实测 176×239（气泡在鲸娘上方，比鲸娘本体高 79px），
+    拖到最右时右边界会超出屏幕 155px，气泡文字与鲸娘右半边被裁掉。
     """
     w = _window(app, tmp_path)
     for _ in range(5):
@@ -487,7 +493,7 @@ def test_clamp_allows_inner_positions_untouched(app, tmp_path):
 
 
 def test_clamp_keeps_whole_window_visible(app, tmp_path):
-    """夹取后整个窗口（含气泡与金娘）都应落在可用区内。"""
+    """夹取后整个窗口（含气泡与鲸娘）都应落在可用区内。"""
     w = _window(app, tmp_path)
     for _ in range(5):
         app.processEvents()
@@ -557,7 +563,7 @@ def test_clamp_picks_screen_containing_target(app, tmp_path):
 def test_first_run_dialog_construct_and_defaults(app, tmp_path):
     """首启引导对话框可构造，默认勾选桌面+开始菜单，自启默认不勾。
 
-    默认值即产品决策：桌面与开始菜单是「找得到金娘」的关键，默认给；
+    默认值即产品决策：桌面与开始菜单是「找得到鲸娘」的关键，默认给；
     开机自启属于用户偏好，不替用户决定。
     """
     from gold_pet.ui import FirstRunDialog
@@ -602,14 +608,14 @@ def test_first_run_dialog_without_tray_mentions_exit(app, tmp_path):
 
 
 def test_first_run_dialog_with_tray_mentions_tray(app, tmp_path):
-    """有托盘时应告诉用户金娘藏在托盘 ^ 里 —— 这是小白找不到她的主要原因。"""
+    """有托盘时应告诉用户鲸娘藏在托盘 ^ 里 —— 这是小白找不到她的主要原因。"""
     from PySide6.QtWidgets import QLabel
 
     from gold_pet.ui import FirstRunDialog
 
     dlg = FirstRunDialog(None, has_tray=True)
     joined = " ".join(lb.text() for lb in dlg.findChildren(QLabel))
-    assert "托盘" in joined, "有托盘时未说明金娘在托盘里"
+    assert "托盘" in joined, "有托盘时未说明鲸娘在托盘里"
     dlg.deleteLater()
 
 
@@ -789,3 +795,45 @@ def test_offline_cache_shows_staleness(app, tmp_path):
     assert "数据陈旧" in ancient
 
     assert "缓存于" not in render_cache_html("黄金", quote)
+
+
+# ---------------------------------------------------------------- v0.7.1 大肥鱼彩蛋
+
+
+def test_pick_fatty_line_tiers():
+    """递进层次：1-2 次嘴硬反驳 / 3-4 次生气甩尾 / 5+ 次记仇别扭。"""
+    for count in (1, 2):
+        assert pick_fatty_line(count) in FATTY_LINES[1], f"count={count} 应落在反驳层"
+    for count in (3, 4):
+        assert pick_fatty_line(count) in FATTY_LINES[2], f"count={count} 应落在生气层"
+    for count in (5, 9):
+        assert pick_fatty_line(count) in FATTY_LINES[3], f"count={count} 应落在记仇层"
+
+
+def test_fatty_lines_have_three_tiers_of_six():
+    """三层各 6 条，台词不与其他层重复。"""
+    assert set(FATTY_LINES) == {1, 2, 3}
+    pools = [set(FATTY_LINES[t]) for t in (1, 2, 3)]
+    for pool in pools:
+        assert len(pool) >= 6, "每层至少 6 条"
+    assert not (pools[0] & pools[1] or pools[1] & pools[2] or pools[0] & pools[2]), "层间台词不应重复"
+
+
+def test_tease_fatty_progresses_and_pat_resets(app, tmp_path):
+    """连叫计数递进；摸摸头哄好归零。"""
+    w = _window(app, tmp_path)
+    assert w.fatty_count == 0
+    for _ in range(3):
+        w.tease_fatty()
+    assert w.fatty_count == 3
+    w.pat()
+    assert w.fatty_count == 0
+
+
+def test_no_gold_girl_naming_regression():
+    """防回潮：台词池与 ui.py 源码不得再出现「金娘」（v0.7.1 起统一称鲸娘）。"""
+    for group, lines in {**LINES, **FATTY_LINES}.items():
+        for line in lines:
+            assert "金娘" not in line, f"台词组 {group} 出现旧称呼：{line}"
+    src = Path(__file__).resolve().parent.parent / "gold_pet" / "ui.py"
+    assert "金娘" not in src.read_text(encoding="utf-8"), "ui.py 仍存在旧称呼「金娘」"

@@ -45,7 +45,7 @@ def main() -> int:
         visible = bool(user32.IsWindowVisible(hwnd))
         left, top, right, bottom = _rect(hwnd)
         width, height = right - left, bottom - top
-        if "黄金" in title or "金娘" in title:
+        if "黄金" in title or "鲸娘" in title:
             found.append(hwnd)
             flags = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
             print(

@@ -155,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
-    # 单实例保护：已经有一个金娘在跑就直接退出（业界通用做法：文件锁）
+    # 单实例保护：已经有一个鲸娘在跑就直接退出（业界通用做法：文件锁）
     lock = QLockFile(str(app_dir() / ".gold-pet.lock"))
     lock.setStaleLockTime(30 * 1000)
     if not lock.tryLock(100):

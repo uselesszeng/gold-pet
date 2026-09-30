@@ -77,21 +77,21 @@ STATES = {
 # 互动台词（v0.7 扩充：每组加量减少重复感，并新增关怀提醒三组）
 LINES = {
     "up": [
-        "金价涨啦，金娘的王冠更亮了✨",
-        "涨！今天的金娘心情超好~",
+        "金价涨啦，鲸娘的王冠更亮了✨",
+        "涨！今天的鲸娘心情超好~",
         "要不要趁现在去逛逛金店？",
         "红彤彤的，看着就喜庆~",
         "涨得这么精神，主人也要加油哦",
-        "金娘的小金库又鼓了一点点",
+        "鲸娘的小金库又鼓了一点点",
         "这波涨势，稳中带甜~",
         "涨啦涨啦！主人快看快看！",
     ],
     "down": [
-        "呜…金娘的金币缩水了",
+        "呜…鲸娘的金币缩水了",
         "别难过，跌下去的都会回来的",
         "跌了也要笑一笑哦~",
         "黄金嘛，跌一跌才好上车呀",
-        "金娘帮你盯着呢，别担心",
+        "鲸娘帮你盯着呢，别担心",
         "风物长宜放眼量，主人~",
         "跌的时候最适合喝口热茶",
         "金子还在，咱们不慌",
@@ -99,100 +99,135 @@ LINES = {
     "idle": [
         "今天也在认真盯盘呢~",
         "要不要喝杯茶再看看？",
-        "金娘会一直陪着你的",
+        "鲸娘会一直陪着你的",
         "行情平平淡淡，主人平平安安",
-        "金娘站在这儿，好像有点困…",
+        "鲸娘站在这儿，好像有点困…",
         "啧，金价怎么还不动呀",
         "主人在忙什么呀？",
-        "（金娘在数自己的鳞片玩）",
+        "（鲸娘在数自己的鳞片玩）",
         "盯盘中…眼睛都不敢眨",
         "有点想鲸鱼妈妈了…",
     ],
     "loading": [
         "正在打听金价…",
         "稍等一下下~",
-        "金娘去问问行情~",
+        "鲸娘去问问行情~",
         "马上就好，主人别急",
         "翻行情小本本中…",
     ],
     "offline": [
         "连不上网了，先看上次的价吧",
         "网络开小差了…",
-        "断网中，金娘也只能干等",
+        "断网中，鲸娘也只能干等",
         "网线是不是被猫咬了呀？",
-        "等网络回来，金娘马上更新~",
+        "等网络回来，鲸娘马上更新~",
     ],
     "welcome": [
-        "你好呀，我是金娘～点一下可以摸我的头",
+        "你好呀，我是鲸娘～点一下可以摸我的头",
         "右键菜单里能换品种、改设置、让我说话",
         "想让我安静一点就去设置里调刷新间隔哦",
-        "金娘入住主人的桌面啦，请多关照~",
+        "鲸娘入住主人的桌面啦，请多关照~",
         "我会一直帮你盯着金价的！",
     ],
     "pat": [
-        "摸摸头~金娘很乖的",
+        "摸摸头~鲸娘很乖的",
         "呀…被摸头了，好开心",
         "再摸一下下好不好~",
         "主人的手好暖和呀",
         "摸头充电中…电量 +1",
-        "金娘的头发不会掉色的哦",
+        "鲸娘的头发不会掉色的哦",
         "嘿嘿，最喜欢主人了",
-        "被摸头的金娘干劲满满！",
+        "被摸头的鲸娘干劲满满！",
     ],
     "shy": [
         "讨厌啦，别一直盯着人家看",
-        "金娘…金娘才没有撒娇呢",
+        "鲸娘…鲸娘才没有撒娇呢",
         "再摸就要闹脾气了哦~",
         "呜，脸都红了啦",
         "人家会不好意思的嘛…",
         "盯、盯太久啦……",
-        "主人坏坏，欺负金娘",
+        "主人坏坏，欺负鲸娘",
         "（小声）其实再摸一下也可以…",
     ],
     "high": [
         "创新高啦！要不要看看金条？",
         "今天涨得好厉害呀~",
-        "新高！金娘要转圈圈庆祝！",
+        "新高！鲸娘要转圈圈庆祝！",
         "哇，今天的金价闪闪发光✨",
     ],
     "low": [
         "跌到今天最低了…抱抱",
-        "别慌，金娘陪着你",
+        "别慌，鲸娘陪着你",
         "今天最低啦，金价也累了吧",
         "抱住主人的大腿不撒手…",
     ],
     # 关怀提醒（v0.7）：只走气泡，遵守勿扰时段
     "care_drink": [
-        "主人，该喝水啦💧金娘盯着呢",
+        "主人，该喝水啦💧鲸娘盯着呢",
         "喝水时间到！小口小口喝~",
-        "金娘的鱼缸都该换水了，主人也喝口水吧💧",
-        "多喝水，皮肤才会像金娘一样好~",
+        "鲸娘的鱼缸都该换水了，主人也喝口水吧💧",
+        "多喝水，皮肤才会像鲸娘一样好~",
         "杯子空了吧？去接点水回来继续忙~",
-        "补水提醒！喝完记得夸夸金娘",
+        "补水提醒！喝完记得夸夸鲸娘",
         "主人主人，喝口水休息一下眼睛嘛",
         "今日份的水分补给（第 N 次）💧",
     ],
     "care_posture": [
         "坐了好久啦，起来伸个懒腰吧~",
         "行情不会跑的，主人起来走两步嘛",
-        "金娘陪你站起来扭一扭~",
+        "鲸娘陪你站起来扭一扭~",
         "久坐警告！去阳台站一会儿好不好",
         "主人，腰要直直的才好看哦",
-        "起来活动一下，金娘看着你的位置等你回来~",
+        "起来活动一下，鲸娘看着你的位置等你回来~",
         "伸懒腰时间到！左边弯弯右边弯弯~",
         "椅子之外还有大世界，去看看？",
     ],
     "care_eye": [
         "看看窗外最远的地方，休息一下眼睛👀",
         "20-20-20 法则：看 6 米外的东西 20 秒~",
-        "眼睛干干的话就眨眨眼嘛，金娘教你",
+        "眼睛干干的话就眨眨眼嘛，鲸娘教你",
         "盯屏幕太久了哦，让眼睛放个假",
-        "望望远处，回来金娘给你讲行情~",
+        "望望远处，回来鲸娘给你讲行情~",
         "护眼时间！眨眼 10 次，开始！",
         "远处的风景免费，主人快看一眼",
-        "金娘替你盯盘，主人看看绿色养养眼~",
+        "鲸娘替你盯盘，主人看看绿色养养眼~",
     ],
 }
+
+# 「大肥鱼」傲娇反应（v0.7.1）：连续叫会递进——反驳 → 生气 → 记仇；
+# 摸摸头会哄好并重置。三层各 6 条，随机挑选。
+FATTY_LINES: dict[int, list[str]] = {
+    1: [  # 前两次：嘴硬反驳
+        "谁、谁是大肥鱼啦！",
+        "人家是鲸娘！鲸！娘！要叫对名字！",
+        "哼，这叫丰腴，懂不懂呀~",
+        "本娘可是一条有梦想的鲸鱼，不许乱叫！",
+        "鲸鱼才不是鱼呢，主人没文化（骄傲）",
+        "再看看把你眼馋的，哼，才不给你摸头",
+    ],
+    2: [  # 三到四次：生气
+        "再叫大肥鱼，涨跌都不告诉主人了哼！",
+        "哼！不理你了！（转身甩尾巴）",
+        "气鼓鼓……气鼓鼓……（真的鼓起来了）",
+        "主人好感度 -1 -1 -1！",
+        "今天金价再好看也不夸主人了！",
+        "哼哼哼！大坏蛋主人！",
+    ],
+    3: [  # 五次及以上：记仇但别扭
+        "……（背过身去，尾巴却还在晃）",
+        "大肥鱼就大肥鱼吧……才怪！哼！",
+        "人家才没有一直在记仇呢……（小本本+1页）",
+        "哼，主人去跟别的鲸鱼玩吧！",
+        "（假装没听见，耳朵尖却红了）",
+        "记仇小本本已经写到第三页了哦……",
+    ],
+}
+
+
+def pick_fatty_line(count: int) -> str:
+    """按「连续被叫大肥鱼」的次数挑台词：1-2 反驳 / 3-4 生气 / 5+ 记仇。"""
+    tier = 1 if count <= 2 else (2 if count <= 4 else 3)
+    return random.choice(FATTY_LINES[tier])
 
 
 class PriceWorker(QThread):
@@ -275,6 +310,7 @@ class PetWindow(QWidget):
         self.unit = cfg.get("unit", "cny_g")
         self.snapshot: Snapshot | None = None
         self.state = "idle"
+        self.fatty_count = 0  # 大肥鱼彩蛋计数：会话内累计，摸摸头哄好即重置
         self.frame_idx = 0
         self.frames: dict[str, list[QPixmap]] = {}
         self._drag_offset = None
@@ -418,7 +454,7 @@ class PetWindow(QWidget):
            中心点判定让窗口能顺滑地跨过屏幕接缝。
         2. 归属屏幕取不到时（极端多屏布局）回落到当前 screen()，再回落到主屏。
         3. 单片屏幕比窗口还小时（罕见，如高 DPI 缩放），availableGeometry 无法容纳，
-           此时退化为「保证左上角在屏幕内」，至少不让气泡和金娘跑到屏幕外不可见。
+           此时退化为「保证左上角在屏幕内」，至少不让气泡和鲸娘跑到屏幕外不可见。
 
         screens_override 仅供测试注入屏幕列表，生产路径传 None 即用真实屏幕。
         """
@@ -593,7 +629,7 @@ class PetWindow(QWidget):
             self._dispatch_alerts(self.notifier.evaluate(quote, metal_name, base_quote=base))
 
     def _dispatch_alerts(self, alerts: list[Alert]) -> None:
-        """把规则层产出的提醒落到界面：气泡高亮 + 金娘说话 + 系统通知。
+        """把规则层产出的提醒落到界面：气泡高亮 + 鲸娘说话 + 系统通知。
 
         勿扰时段内只静音系统通知，气泡与台词照常（用户可在设置里关闭勿扰）。
         """
@@ -655,7 +691,7 @@ class PetWindow(QWidget):
 
     # ------------------------------------------------------- 关怀提醒（v0.7）
     def _care_tick(self) -> None:
-        """每半分钟查一次：到点的关怀提醒就让金娘说一句。
+        """每半分钟查一次：到点的关怀提醒就让鲸娘说一句。
 
         勿扰时段内不出声（计时保留，勿扰结束后到点的会立即补上）。
         同一时刻到期多条时只说优先级最高的一条，其余顺延 90 秒。
@@ -679,7 +715,7 @@ class PetWindow(QWidget):
 
     # ------------------------------------------------------------------ 引导
     def welcome(self) -> None:
-        """首次运行引导：金娘自我介绍 + 托盘气泡说明交互方式。
+        """首次运行引导：鲸娘自我介绍 + 托盘气泡说明交互方式。
 
         由 main.py 在检测到首次启动（settings.json 不存在）时调用。
         无托盘环境下只说话，不弹气泡通知。
@@ -688,7 +724,7 @@ class PetWindow(QWidget):
         tray = self.tray_icon()
         if tray is not None and tray.isSystemTrayAvailable():
             tray.showMessage(
-                "黄金桌宠 · 金娘来啦",
+                "黄金桌宠 · 鲸娘来啦",
                 "左键单击 = 摸摸头 · 双击 = 立即刷新 · 拖动 = 换位置 · 右键 = 菜单",
                 QSystemTrayIcon.Information,
                 10000,
@@ -704,7 +740,12 @@ class PetWindow(QWidget):
 
     # ------------------------------------------------------- 摸头 / 撒娇
     def pat(self) -> None:
-        """摸头：眯眼笑 + 台词，1.5 秒后回到行情状态。"""
+        """摸头：眯眼笑 + 台词，1.5 秒后回到行情状态。
+
+        摸头会哄好「被叫大肥鱼」的傲娇：生气计数归零（v0.7.1）。
+        """
+        if self.fatty_count > 0:
+            self.fatty_count = 0
         self.speak("pat")
         self._play_state("pat", 1500)
 
@@ -712,6 +753,20 @@ class PetWindow(QWidget):
         """撒娇：眼神飘开 + 台词，2.5 秒后回到行情状态。"""
         self.speak("shy")
         self._play_state("shy", 2500)
+
+    # -------------------------------------------------- 「大肥鱼」傲娇彩蛋
+    def tease_fatty(self) -> None:
+        """叫她「大肥鱼」：傲娇递进反应，连续叫会越来越生气，摸头可哄好。
+
+        会话内计数（不持久化）——每次启动都是新的原谅。
+        """
+        self.fatty_count += 1
+        self.bubble.setText(render_line_html(pick_fatty_line(self.fatty_count)))
+        self._speak_timer.start(4000)
+        self._play_state("shy", 2500)  # 恼怒害羞的表情最贴切
+        logging.getLogger("gold_pet").info(
+            "触发大肥鱼彩蛋（连续第 %d 次）", self.fatty_count
+        )
 
     def _play_state(self, state: str, ms: int) -> None:
         self._set_state(state)
@@ -763,8 +818,8 @@ class PetWindow(QWidget):
                 self._moved = True
                 self._press_timer.stop()
             # 关键：拖动必须夹取在屏幕可视区内。此前直接 move()，
-            # 贴边时窗口（高 239px，气泡在金娘上方）会被推出屏幕，
-            # 表现为气泡与金娘被裁掉一半的「卡半边」。
+            # 贴边时窗口（高 239px，气泡在鲸娘上方）会被推出屏幕，
+            # 表现为气泡与鲸娘被裁掉一半的「卡半边」。
             target = event.globalPosition().toPoint() - self._drag_offset
             self.move(self._clamp_to_screen(target.x(), target.y()))
             event.accept()
@@ -843,7 +898,7 @@ class PetWindow(QWidget):
         made = [name for name, ok in results.items() if ok]
         if made:
             labels = {"desktop": "桌面", "startmenu": "开始菜单"}
-            self.bubble_say("已把金娘放到：" + "、".join(labels[m] for m in made) + " 🎉", 4000)
+            self.bubble_say("已把鲸娘放到：" + "、".join(labels[m] for m in made) + " 🎉", 4000)
             logging.getLogger("gold_pet").info("快捷方式创建成功：%s", made)
         else:
             self.bubble_say("快捷方式创建失败，请检查权限 😢", 4000)
@@ -863,7 +918,7 @@ class PetWindow(QWidget):
     def bubble_say(self, text: str, ms: int = 3000) -> None:
         """临时在气泡里说一句话，ms 后恢复行情显示。
 
-        与 speak() 的区别：speak 走的是「金娘台词」体系（PAT_LINES 等），
+        与 speak() 的区别：speak 走的是「鲸娘台词」体系（PAT_LINES 等），
         这里用于系统级反馈（创建成功/失败），不占用台词池。
         """
         self.bubble.setText(text)
@@ -1103,7 +1158,7 @@ class SettingsDialog(QDialog):
         care_form.addRow("", self.posture_check)
         care_form.addRow("", self.eye_check)
         care_form.addRow("", _hint_label(
-            "到点时金娘会用气泡说一句话（约 4 秒后自动消失），\n"
+            "到点时鲸娘会用气泡说一句话（约 4 秒后自动消失），\n"
             "不弹系统通知、不进提醒中心；勿扰时段内不会出声。"
         ))
 
@@ -1299,7 +1354,7 @@ class AboutDialog(QDialog):
 
         body = QLabel(
             "<div style='font-size:12px; line-height:1.7'>"
-            "一只住在桌面上的「金娘」，实时盯着金价：<br>"
+            "一只住在桌面上的「鲸娘」，实时盯着金价：<br>"
             "涨了笑、跌了哭，点一下就能看到最新价格。<br><br>"
             "<b>数据来源</b><br>"
             "· 国内金价：新浪财经 <code>gds_AUTD</code>（上金所 Au T+D）<br>"
@@ -1355,10 +1410,10 @@ class FirstRunDialog(QDialog):
         self.setMinimumWidth(420)
         self.setMaximumWidth(520)
 
-        title = QLabel('<div style="font-size:16px;font-weight:600">🐥 金娘来啦～</div>')
+        title = QLabel('<div style="font-size:16px;font-weight:600">🐥 鲸娘来啦～</div>')
         intro = QLabel(
             "<div style='font-size:12px;line-height:1.7'>"
-            "金娘会一直<b>待在桌面右下角</b>陪你盯金价，"
+            "鲸娘会一直<b>待在桌面右下角</b>陪你盯金价，"
             "涨了笑、跌了哭，点一下就能切单位。<br><br>"
             + (
                 "关掉窗口后她不会消失，而是<b>回到系统托盘的 ^ 里</b>"
@@ -1456,7 +1511,8 @@ def build_menu(window: PetWindow) -> QMenu:
     menu.addSeparator()
     menu.addAction("摸摸头", window.pat)
     menu.addAction("撒娇一下", window.shy)
-    menu.addAction("让金娘说句话", lambda: window.speak())
+    menu.addAction("让鲸娘说句话", lambda: window.speak())
+    menu.addAction("叫她大肥鱼🐟", window.tease_fatty)  # v0.7.1：傲娇彩蛋，连点会记仇
     menu.addSeparator()
 
     act_top = menu.addAction("窗口置顶")

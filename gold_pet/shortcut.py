@@ -1,7 +1,7 @@
 """桌面 / 开始菜单快捷方式（Windows）。
 
 小白用户下载 exe 后双击运行，程序**不在任务栏显示**（桌宠用 Qt.Tool 是设计使然），
-关掉窗口又想再打开时无处可找。本模块负责把「金娘的入口」放到用户找得到的地方。
+关掉窗口又想再打开时无处可找。本模块负责把「鲸娘的入口」放到用户找得到的地方。
 
 实现方式：直接用 ctypes 调 Win32 COM（IShellLink + IPersistFile），
 **零新增依赖**——不引入 pywin32 / winshell 这类第三方包。
@@ -127,7 +127,7 @@ def is_supported() -> bool:
 
 
 def is_created(where: str) -> bool:
-    """指定位置是否已存在金娘的快捷方式。"""
+    """指定位置是否已存在鲸娘的快捷方式。"""
     path = shortcut_path(where)
     return bool(path and path.exists())
 

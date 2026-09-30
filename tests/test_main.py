@@ -170,3 +170,53 @@ def test_autostart_roundtrip_on_windows():
     finally:
         autostart.set_enabled(original)
     assert autostart.is_enabled() is original
+
+
+# ------------------------------------------------- 首启引导（v0.5.4）
+
+
+def test_onboard_skipped_on_source_run(tmp_path, monkeypatch):
+    """源码运行（非 frozen）必须跳过首启引导。
+
+    此时快捷方式会指向 pythonw.exe + run.py，对用户毫无意义，
+    只会在桌面留下垃圾图标。这里断言「一个快捷方式都没创建」。
+    """
+    created = []
+    monkeypatch.setattr(main_mod.shortcut, "is_supported", lambda: True)
+    monkeypatch.setattr(
+        main_mod.shortcut, "create_many", lambda wheres, icon=None: created.append(wheres) or {}
+    )
+
+    class _W:
+        def tray_icon(self):
+            return None
+
+    # 非 frozen → 直接返回，不弹对话框、不创建快捷方式
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    main_mod._maybe_onboard(_W(), True, __import__("logging").getLogger("t"))
+    assert created == [], f"源码运行不应创建快捷方式，实际创建了 {created}"
+
+
+def test_onboard_skipped_when_not_first_run(monkeypatch):
+    """非首次运行不弹引导（否则每次启动都骚扰用户）。"""
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(main_mod.shortcut, "is_supported", lambda: True)
+
+    class _W:
+        def tray_icon(self):
+            return None
+
+    # first_run=False → 直接返回
+    main_mod._maybe_onboard(_W(), False, __import__("logging").getLogger("t"))
+
+
+def test_onboard_skipped_when_unsupported(monkeypatch):
+    """不支持快捷方式的平台不弹引导。"""
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(main_mod.shortcut, "is_supported", lambda: False)
+
+    class _W:
+        def tray_icon(self):
+            return None
+
+    main_mod._maybe_onboard(_W(), True, __import__("logging").getLogger("t"))

@@ -554,10 +554,192 @@ def test_clamp_picks_screen_containing_target(app, tmp_path):
     assert point.x() >= 1920, f"跨屏拖动被拽回左屏：x={point.x()}"
 
 
+def test_first_run_dialog_construct_and_defaults(app, tmp_path):
+    """首启引导对话框可构造，默认勾选桌面+开始菜单，自启默认不勾。
+
+    默认值即产品决策：桌面与开始菜单是「找得到金娘」的关键，默认给；
+    开机自启属于用户偏好，不替用户决定。
+    """
+    from gold_pet.ui import FirstRunDialog
+
+    dlg = FirstRunDialog(None, has_tray=True)
+    assert dlg.windowTitle() == "欢迎使用 黄金桌宠"
+    assert dlg.isModal() is True
+    assert dlg.wants_desktop() is True
+    assert dlg.wants_startmenu() is True
+    assert dlg.wants_autostart() is False
+    assert 380 <= dlg.width() <= 560, f"对话框宽度异常：{dlg.width()}"
+    dlg.deleteLater()
+
+
+def test_first_run_dialog_bounded_size(app, tmp_path):
+    """对话框不得撑满屏幕（v0.5.1 设置面板踩过这个坑）。"""
+    from gold_pet.ui import FirstRunDialog
+
+    dlg = FirstRunDialog(None, has_tray=True)
+    screen = app.primaryScreen().availableGeometry()
+    assert dlg.width() <= min(560, screen.width())
+    assert dlg.height() <= screen.height()
+    dlg.deleteLater()
+
+
+def test_first_run_dialog_without_tray_mentions_exit(app, tmp_path):
+    """无托盘环境必须在文案里说清「关窗即退出」，不能让用户以为还在后台跑。"""
+    from gold_pet.ui import FirstRunDialog
+
+    dlg = FirstRunDialog(None, has_tray=False)
+    texts = " ".join(
+        w.text() for w in dlg.findChildren(type(dlg.desktop_check).__mro__[0]) if hasattr(w, "text")
+    )
+    # 直接检查所有 QLabel 的文案
+    from PySide6.QtWidgets import QLabel
+
+    joined = " ".join(lb.text() for lb in dlg.findChildren(QLabel))
+    assert "退出" in joined, "无托盘时未提示关窗即退出"
+    assert "托盘" not in joined, "无托盘时不应提托盘"
+    assert texts is not None
+    dlg.deleteLater()
+
+
+def test_first_run_dialog_with_tray_mentions_tray(app, tmp_path):
+    """有托盘时应告诉用户金娘藏在托盘 ^ 里 —— 这是小白找不到她的主要原因。"""
+    from PySide6.QtWidgets import QLabel
+
+    from gold_pet.ui import FirstRunDialog
+
+    dlg = FirstRunDialog(None, has_tray=True)
+    joined = " ".join(lb.text() for lb in dlg.findChildren(QLabel))
+    assert "托盘" in joined, "有托盘时未说明金娘在托盘里"
+    dlg.deleteLater()
+
+
+def test_menu_shows_create_shortcut_when_missing(app, tmp_path, monkeypatch):
+    """桌面没有快捷方式时，菜单应出现「创建桌面快捷方式」。"""
+    import gold_pet.ui as ui_mod
+    from gold_pet.shortcut import is_supported
+
+    if not is_supported():
+        pytest.skip("当前平台不支持快捷方式")
+
+    monkeypatch.setattr(ui_mod.shortcut, "is_created", lambda where: False)
+    w = _window(app, tmp_path)
+    menu = ui_mod.build_menu(w)
+    labels = [a.text() for a in menu.actions()]
+    assert "创建桌面快捷方式" in labels, f"菜单缺少创建入口：{labels}"
+
+
+def test_menu_shows_open_folder_when_created(app, tmp_path, monkeypatch):
+    """已有快捷方式时不再重复提示创建，改为「打开程序所在文件夹」。"""
+    import gold_pet.ui as ui_mod
+    from gold_pet.shortcut import is_supported
+
+    if not is_supported():
+        pytest.skip("当前平台不支持快捷方式")
+
+    monkeypatch.setattr(ui_mod.shortcut, "is_created", lambda where: True)
+    w = _window(app, tmp_path)
+    menu = ui_mod.build_menu(w)
+    labels = [a.text() for a in menu.actions()]
+    assert "打开程序所在文件夹" in labels, f"菜单缺少打开文件夹入口：{labels}"
+    assert "创建桌面快捷方式" not in labels
+
+
+def test_menu_hides_shortcut_when_unsupported(app, tmp_path, monkeypatch):
+    """不支持快捷方式的平台不应出现相关菜单项，避免点了没反应。"""
+    import gold_pet.ui as ui_mod
+
+    monkeypatch.setattr(ui_mod.shortcut, "is_supported", lambda: False)
+    w = _window(app, tmp_path)
+    menu = ui_mod.build_menu(w)
+    labels = [a.text() for a in menu.actions()]
+    assert "创建桌面快捷方式" not in labels
+    assert "打开程序所在文件夹" not in labels
+
+
+def test_create_shortcuts_reports_result_in_bubble(app, tmp_path, monkeypatch):
+    """创建结果要通过气泡反馈给用户，不能静默成功/失败。"""
+    import gold_pet.ui as ui_mod
+
+    created = {}
+    monkeypatch.setattr(
+        ui_mod.shortcut, "create_many", lambda wheres, icon=None: {"desktop": True,
+                                                                   "startmenu": True}
+    )
+    monkeypatch.setattr(ui_mod.shortcut, "is_supported", lambda: True)
+    w = _window(app, tmp_path)
+    w.create_shortcuts()
+    text = w.bubble.text()
+    created["text"] = text
+    assert "桌面" in text or "成功" in text, f"未反馈创建结果：{text!r}"
+
+
+def test_create_shortcuts_failure_gives_friendly_message(app, tmp_path, monkeypatch):
+    """创建失败要有友好提示，而不是抛异常或静默。"""
+    import gold_pet.ui as ui_mod
+
+    monkeypatch.setattr(
+        ui_mod.shortcut, "create_many", lambda wheres, icon=None: {"desktop": False,
+                                                                   "startmenu": False}
+    )
+    monkeypatch.setattr(ui_mod.shortcut, "is_supported", lambda: True)
+    w = _window(app, tmp_path)
+    w.create_shortcuts()
+    assert "失败" in w.bubble.text()
+
+
+def test_bubble_say_restores_price(app, tmp_path):
+    """bubble_say 的临时消息到点后必须恢复行情，不能一直挂着系统提示。"""
+    w = _window(app, tmp_path)
+    snap = parse_snapshot(RAW)
+
+    w._render(snap, silent=True)
+    before = w.bubble.text()
+    w.bubble_say("测试消息", ms=50)
+    assert "测试消息" in w.bubble.text()
+
+    w._restore_bubble()
+    assert w.bubble.text() == before, "恢复后气泡未回到行情内容"
+
+
+def test_settings_dialog_has_shortcut_controls(app, tmp_path, monkeypatch):
+    """设置面板应能管理快捷方式（创建后可随时取消）。"""
+    import gold_pet.ui as ui_mod
+
+    monkeypatch.setattr(ui_mod.shortcut, "is_supported", lambda: True)
+    monkeypatch.setattr(ui_mod.shortcut, "is_created", lambda where: False)
+    dlg = ui_mod.SettingsDialog(Config())
+    assert hasattr(dlg, "desktop_link_check")
+    assert hasattr(dlg, "startmenu_link_check")
+    assert dlg.desktop_link_check.isChecked() is False
+    dlg.deleteLater()
+
+
+def test_settings_dialog_saves_shortcut_state(app, tmp_path, monkeypatch):
+    """设置面板保存时，勾选要调用创建、取消勾选要调用删除。"""
+    import gold_pet.ui as ui_mod
+
+    calls = {"create": [], "remove": []}
+    monkeypatch.setattr(ui_mod.shortcut, "is_supported", lambda: True)
+    monkeypatch.setattr(ui_mod.shortcut, "is_created", lambda where: False)
+    monkeypatch.setattr(
+        ui_mod.shortcut, "create", lambda where, icon=None: calls["create"].append(where) or True
+    )
+    monkeypatch.setattr(
+        ui_mod.shortcut, "remove", lambda where: calls["remove"].append(where) or True
+    )
+
+    cfg = Config()
+    dlg = ui_mod.SettingsDialog(cfg)
+    dlg.desktop_link_check.setChecked(True)
+    dlg.startmenu_link_check.setChecked(False)
+    dlg.accept()
+    assert calls["create"] == ["desktop"], calls
+    assert calls["remove"] == ["startmenu"], calls
+
+
 def test_long_press_without_move_triggers_shy(app, tmp_path):
     from PySide6.QtCore import QEvent, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
-
     w = _window(app, tmp_path)
     w.mousePressEvent(
         QMouseEvent(

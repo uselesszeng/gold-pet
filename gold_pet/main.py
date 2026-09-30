@@ -16,7 +16,7 @@ import logging.handlers
 import sys
 import traceback
 
-from . import __version__
+from . import __version__, autostart, shortcut
 from .config import METAL_NAMES, Config, app_dir, asset_dir
 from .price import HistoryStore, PriceService
 from .ui import PetWindow, build_tray
@@ -94,6 +94,45 @@ def run_once(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
+def _maybe_onboard(window, first_run: bool, log) -> None:
+    """首次运行引导：询问是否创建快捷方式（仅打包后的 exe）。
+
+    为什么要做这件事：桌宠不进任务栏是产品设计（Qt.Tool），
+    用户双击 exe 后关掉窗口就再也找不到入口了。
+    小白用户会认为「程序丢了」，实际它只是回到托盘里。
+
+    源码运行（开发模式）跳过：此时快捷方式指向 pythonw.exe + run.py，
+    对用户没有意义，只会在桌面留下垃圾。
+    """
+    if not first_run or not getattr(sys, "frozen", False):
+        return
+    if not shortcut.is_supported():
+        return
+
+    from .ui import FirstRunDialog
+
+    tray_ok = window.tray_icon() is not None
+    dlg = FirstRunDialog(window, has_tray=tray_ok)
+    # exec() 返回非 0 表示点了「好呀」；用户选「暂时不用」则什么都不做
+    if dlg.exec() == 0:
+        return
+
+    icon = asset_dir() / "icon.ico"
+    wheres = []
+    if dlg.wants_desktop():
+        wheres.append("desktop")
+    if dlg.wants_startmenu():
+        wheres.append("startmenu")
+    if wheres:
+        results = shortcut.create_many(wheres, icon=icon if icon.exists() else None)
+        log.info("首启引导已创建快捷方式：%s", results)
+    if dlg.wants_autostart():
+        autostart.set_enabled(True)
+        window.cfg.set("autostart", True)
+        window.cfg.save()
+        log.info("首启引导已开启开机自启")
+
+
 def main(argv: list[str] | None = None) -> int:
     _ensure_utf8_stdout()
     args = parse_args(argv)
@@ -142,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
     window.show()
     if first_run:
         window.welcome()  # 首次运行：说句话 + 托盘气泡引导
+        _maybe_onboard(window, first_run, log)  # 首启引导：快捷方式
     log.info("界面已启动")
     return app.exec()
 

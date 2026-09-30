@@ -7,8 +7,16 @@ import random
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QPointF, Qt, QThread, QTime, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QPoint, QPointF, Qt, QThread, QTime, QTimer, QUrl, Signal
+from PySide6.QtGui import (
+    QColor,
+    QDesktopServices,
+    QIcon,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -31,7 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__, autostart
+from . import __version__, autostart, shortcut
 from .bubble import (
     ALERT_STYLE,
     BUBBLE_STYLE,
@@ -182,6 +190,10 @@ class PetWindow(QWidget):
         self._interact_timer = QTimer(self)
         self._interact_timer.setSingleShot(True)
         self._interact_timer.timeout.connect(self._end_interact)
+        # v0.5.4：气泡临时消息（如「快捷方式创建成功」）到点后恢复行情
+        self._bubble_restore_timer = QTimer(self)
+        self._bubble_restore_timer.setSingleShot(True)
+        self._bubble_restore_timer.timeout.connect(self._restore_bubble)
         self._long_pressed = False
         self._fail_streak = 0
         self._retry_timer = QTimer(self)
@@ -676,6 +688,45 @@ class PetWindow(QWidget):
         """关于窗口：版本、数据来源、免责声明、许可。"""
         AboutDialog(self).exec()
 
+    # -------------------------------------------------- 快捷方式（v0.5.4）
+    def create_shortcuts(self) -> None:
+        """一键创建桌面 + 开始菜单快捷方式，并给用户明确反馈。"""
+        icon = asset_dir() / "icon.ico"
+        results = shortcut.create_many(["desktop", "startmenu"], icon=icon if icon.exists() else None)
+        made = [name for name, ok in results.items() if ok]
+        if made:
+            labels = {"desktop": "桌面", "startmenu": "开始菜单"}
+            self.bubble_say("已把金娘放到：" + "、".join(labels[m] for m in made) + " 🎉", 4000)
+            logging.getLogger("gold_pet").info("快捷方式创建成功：%s", made)
+        else:
+            self.bubble_say("快捷方式创建失败，请检查权限 😢", 4000)
+            logging.getLogger("gold_pet").warning("快捷方式创建失败：%s", results)
+
+    def open_install_folder(self) -> None:
+        """打开程序所在文件夹，方便用户自己拖快捷方式或查看文件。"""
+        target = shortcut._target_path()
+        if target is None:
+            return
+        folder = target.parent
+        try:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+        except Exception as exc:  # pragma: no cover - 依赖系统外壳
+            logging.getLogger("gold_pet").warning("打开文件夹失败：%s", exc)
+
+    def bubble_say(self, text: str, ms: int = 3000) -> None:
+        """临时在气泡里说一句话，ms 后恢复行情显示。
+
+        与 speak() 的区别：speak 走的是「金娘台词」体系（PAT_LINES 等），
+        这里用于系统级反馈（创建成功/失败），不占用台词池。
+        """
+        self.bubble.setText(text)
+        self._bubble_restore_timer.start(ms)
+
+    def _restore_bubble(self) -> None:
+        """恢复气泡的行情内容。"""
+        if self.snapshot is not None:
+            self._render(self.snapshot, silent=True)
+
     def open_alert_history(self) -> None:
         """提醒历史窗口（v0.5 提醒中心）。"""
         AlertHistoryDialog(self.notifier, self).exec()
@@ -788,6 +839,13 @@ class SettingsDialog(QDialog):
         self.autostart_check = QCheckBox("开机自动启动")
         self.autostart_check.setChecked(autostart.is_enabled())
 
+        # v0.5.4：快捷方式管理（仅 Windows 打包版有意义）
+        self.desktop_link_check = QCheckBox("桌面快捷方式")
+        self.desktop_link_check.setChecked(shortcut.is_created("desktop"))
+        self.startmenu_link_check = QCheckBox("开始菜单快捷方式")
+        self.startmenu_link_check.setChecked(shortcut.is_created("startmenu"))
+        self._link_supported = shortcut.is_supported()
+
         # ---- v0.5 提醒中心：三类提醒独立开关 ----
         self.pct_enabled_check = QCheckBox("启用涨跌幅提醒")
         self.pct_enabled_check.setChecked(bool(cfg.get("alert_pct_enabled", True)))
@@ -831,6 +889,10 @@ class SettingsDialog(QDialog):
         form.addRow("走势图范围", self.spark_range_combo)
         form.addRow("", self.tray_price_check)
         form.addRow("", self.autostart_check)
+        if self._link_supported:
+            # 快捷方式仅在 Windows 打包版有实际作用，其他环境不显示以免困惑
+            form.addRow("", self.desktop_link_check)
+            form.addRow("", self.startmenu_link_check)
 
         alert_form = QFormLayout()
         alert_form.addRow("涨跌提醒阈值", self.alert_spin)
@@ -930,6 +992,18 @@ class SettingsDialog(QDialog):
         self.cfg.set("spark_range", self.spark_range_combo.currentData())
         self.cfg.set("tray_show_price", self.tray_price_check.isChecked())
         autostart.set_enabled(self.autostart_check.isChecked())
+        # v0.5.4：按勾选状态增删快捷方式（幂等，重复创建会覆盖）
+        if self._link_supported:
+            icon = asset_dir() / "icon.ico"
+            icon_arg = icon if icon.exists() else None
+            for where, check in (
+                ("desktop", self.desktop_link_check),
+                ("startmenu", self.startmenu_link_check),
+            ):
+                if check.isChecked():
+                    shortcut.create(where, icon=icon_arg)
+                else:
+                    shortcut.remove(where)
         self.cfg.save()
         super().accept()
 
@@ -1041,6 +1115,115 @@ class AboutDialog(QDialog):
         layout.addLayout(buttons)
 
 
+class FirstRunDialog(QDialog):
+    """首次运行引导：帮小白用户把「入口」放到找得到的地方。
+
+    背景：桌宠用 Qt.Tool 不进任务栏（产品设计如此），用户关掉窗口后
+    无处可寻，下次只能用「最近使用」翻出来或重新下载。
+    本对话框用一句人话问清楚，勾选即建快捷方式，不静默往桌面丢图标。
+
+    仅在**打包后的 exe** 运行时调用；源码运行会跳过（见 main.py）。
+    """
+
+    def __init__(self, parent=None, has_tray: bool = True):
+        super().__init__(parent)
+        self.setWindowTitle("欢迎使用 黄金桌宠")
+        self.setModal(True)
+        self.setMinimumWidth(420)
+        self.setMaximumWidth(520)
+
+        title = QLabel('<div style="font-size:16px;font-weight:600">🐥 金娘来啦～</div>')
+        intro = QLabel(
+            "<div style='font-size:12px;line-height:1.7'>"
+            "金娘会一直<b>待在桌面右下角</b>陪你盯金价，"
+            "涨了笑、跌了哭，点一下就能切单位。<br><br>"
+            + (
+                "关掉窗口后她不会消失，而是<b>回到系统托盘的 ^ 里</b>"
+                "（时钟旁边那个小箭头），随时能叫她出来。"
+                if has_tray
+                else "关掉窗口她就退出了，想再见到她请重新打开本程序。"
+            )
+            + "</div>"
+        )
+        intro.setWordWrap(True)
+
+        hint = QLabel(
+            '<div style="font-size:12px;color:#666">'
+            "为了让您<b>下次也能方便地找到她</b>，建议添加到下面这些位置：</div>"
+        )
+        hint.setWordWrap(True)
+
+        self.desktop_check = QCheckBox("在桌面创建快捷方式（推荐）")
+        self.desktop_check.setChecked(True)
+        self.startmenu_check = QCheckBox("添加到开始菜单")
+        self.startmenu_check.setChecked(True)
+        self.autostart_check = QCheckBox("开机自动启动（每次开机自动陪您）")
+        self.autostart_check.setChecked(False)
+
+        # 托盘不可用时，开头就要提醒用户「关窗即退出」，避免以为还在后台跑
+        ok = QPushButton("好呀，就这么办")
+        ok.setDefault(True)
+        skip = QPushButton("暂时不用")
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(title)
+        layout.addSpacing(2)
+        layout.addWidget(intro)
+        layout.addSpacing(8)
+        layout.addWidget(hint)
+        layout.addSpacing(2)
+        layout.addWidget(self.desktop_check)
+        layout.addWidget(self.startmenu_check)
+        layout.addWidget(self.autostart_check)
+        layout.addSpacing(8)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(skip)
+        buttons.addWidget(ok)
+        layout.addLayout(buttons)
+
+        ok.clicked.connect(self.accept)
+        skip.clicked.connect(self.reject)
+
+        self.resize(440, 340)
+        _center_on_screen(self, parent)
+
+    def wants_desktop(self) -> bool:
+        return self.desktop_check.isChecked()
+
+    def wants_startmenu(self) -> bool:
+        return self.startmenu_check.isChecked()
+
+    def wants_autostart(self) -> bool:
+        return self.autostart_check.isChecked()
+
+
+def _center_on_screen(dialog: QDialog, parent=None) -> None:
+    """把对话框摆到父窗口（或主屏）中央，并夹取到可视区内。"""
+    screen = None
+    if parent is not None and parent.isVisible():
+        screen = parent.screen()
+    if screen is None:
+        screen = QApplication.primaryScreen()
+    if screen is None:
+        return
+    geo = screen.availableGeometry()
+    width = min(dialog.width(), geo.width())
+    height = min(dialog.height(), geo.height())
+    dialog.resize(width, height)
+
+    if parent is not None and parent.isVisible():
+        anchor = parent.frameGeometry()
+    else:
+        anchor = geo
+    x = anchor.center().x() - width // 2
+    y = anchor.center().y() - height // 2
+    x = max(geo.left(), min(x, geo.right() - width))
+    y = max(geo.top(), min(y, geo.bottom() - height))
+    dialog.move(x, y)
+
+
 def build_menu(window: PetWindow) -> QMenu:
     """统一的菜单构建：右键菜单与托盘菜单共用。"""
     menu = QMenu(window)
@@ -1079,6 +1262,15 @@ def build_menu(window: PetWindow) -> QMenu:
     menu.addSeparator()
     menu.addAction("提醒历史…", window.open_alert_history)
     menu.addAction("设置…", window.open_settings)
+
+    # v0.5.4：快捷方式入口。桌面/开始菜单都没有时，给个「一键创建」；
+    # 已有则不再刷屏，留「打开所在文件夹」帮用户找到它。
+    if shortcut.is_supported():
+        if not shortcut.is_created("desktop"):
+            menu.addAction("创建桌面快捷方式", window.create_shortcuts)
+        else:
+            menu.addAction("打开程序所在文件夹", window.open_install_folder)
+
     menu.addAction("关于…", window.open_about)
     if window.tray_icon() is not None:
         menu.addAction("隐藏到托盘", window.hide)

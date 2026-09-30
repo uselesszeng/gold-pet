@@ -20,5 +20,12 @@ coverage.xml
 # 调试截图（tools/grab_screen.py 的产物）
 *.bmp
 
+# 诊断脚本产物（tools/diag_*.py 的截图与临时配置）
+tools/_out/
+_diag_tmp/
+
+# PyInstaller 生成的版本资源（gold-pet.spec 构建时写出，随包名变化）
+version_info.txt
+
 # 发布包暂存（体积大，不进仓库；通过 Release 附件分发）
 release/

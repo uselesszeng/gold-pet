@@ -281,19 +281,67 @@ class PetWindow(QWidget):
                     return
         QTimer.singleShot(0, self._snap_to_corner)
 
+    # ------------------------------------------------------------------ 定位
+    def _window_size(self) -> tuple[int, int]:
+        """窗口实际占位尺寸。
+
+        布局定型前 width()/height() 可能还是旧值（见 _move_to_default 的说明），
+        因此与 sizeHint() 取较大者，避免按过小的尺寸算边界、把窗口推出屏幕。
+        """
+        width = max(self.width(), self.sizeHint().width(), self.minimumSizeHint().width())
+        height = max(self.height(), self.sizeHint().height(), self.minimumSizeHint().height())
+        return width, height
+
+    def _clamp_to_screen(self, x: int, y: int, screens_override=None) -> QPoint:
+        """把窗口左上角坐标夹取到「离目标点最近的那块屏幕」的可视区内。
+
+        多屏适配策略（拖动时调用，故必须便宜且无副作用）：
+        1. 以窗口中心点判定归属屏幕——用左上角会在跨屏时抖动（窗口一半在左屏、
+           一半在右屏时，左上角仍在左屏，夹取结果会把窗口拽回左屏，产生「卡住」感）。
+           中心点判定让窗口能顺滑地跨过屏幕接缝。
+        2. 归属屏幕取不到时（极端多屏布局）回落到当前 screen()，再回落到主屏。
+        3. 单片屏幕比窗口还小时（罕见，如高 DPI 缩放），availableGeometry 无法容纳，
+           此时退化为「保证左上角在屏幕内」，至少不让气泡和金娘跑到屏幕外不可见。
+
+        screens_override 仅供测试注入屏幕列表，生产路径传 None 即用真实屏幕。
+        """
+        screens = QApplication.screens() if screens_override is None else list(screens_override)
+        screen = None
+        probe = QPoint(x, y)
+        for candidate in screens:
+            if candidate.availableGeometry().contains(probe):
+                screen = candidate
+                break
+        if screen is None:
+            screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return QPoint(x, y)
+
+        geo = screen.availableGeometry()
+        width, height = self._window_size()
+
+        # 屏幕容纳不下窗口：退化为「左上角入屏」，避免把坐标抬到屏幕外
+        if width > geo.width() or height > geo.height():
+            return QPoint(
+                max(geo.left(), min(x, geo.right())),
+                max(geo.top(), min(y, geo.bottom())),
+            )
+
+        clamped_x = max(geo.left(), min(x, geo.right() - width + 1))
+        clamped_y = max(geo.top(), min(y, geo.bottom() - height + 1))
+        return QPoint(clamped_x, clamped_y)
+
     def _snap_to_corner(self, margin: int = 24) -> None:
         """把窗口摆到主屏右下角，留出 margin 边距，并夹取在可视区内。"""
         screen = self.screen() or QApplication.primaryScreen()
         if screen is None:
             return
         geo = screen.availableGeometry()
-        width = max(self.width(), self.sizeHint().width())
-        height = max(self.height(), self.sizeHint().height())
+        width, height = self._window_size()
         x = geo.right() - width - margin
         y = geo.bottom() - height - margin
-        x = max(geo.left(), min(x, geo.right() - width))
-        y = max(geo.top(), min(y, geo.bottom() - height))
-        self.move(x, y)
+        point = self._clamp_to_screen(x, y)
+        self.move(point)
 
     def _apply_interval(self) -> None:
         self.refresh_timer.start(int(self.cfg.get("interval_sec", 60)) * 1000)
@@ -563,7 +611,11 @@ class PetWindow(QWidget):
             if not self._moved:
                 self._moved = True
                 self._press_timer.stop()
-            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            # 关键：拖动必须夹取在屏幕可视区内。此前直接 move()，
+            # 贴边时窗口（高 239px，气泡在金娘上方）会被推出屏幕，
+            # 表现为气泡与金娘被裁掉一半的「卡半边」。
+            target = event.globalPosition().toPoint() - self._drag_offset
+            self.move(self._clamp_to_screen(target.x(), target.y()))
             event.accept()
 
     def mouseReleaseEvent(self, event):  # noqa: N802

@@ -404,8 +404,157 @@ def test_drag_does_not_trigger_shy(app, tmp_path):
     assert w.state != "shy"
 
 
+def _drag_to(w, gx, gy):
+    """模拟一次「按下 → 拖到 (gx, gy)」的鼠标操作。"""
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+
+    def mouse(kind, x, y):
+        return QMouseEvent(
+            kind, QPointF(10, 10), QPointF(x, y), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier
+        )
+
+    w.mousePressEvent(mouse(QEvent.MouseButtonPress, 100, 100))
+    w.mouseMoveEvent(mouse(QEvent.MouseMove, gx, gy))
+
+
+def test_drag_to_right_edge_keeps_window_inside_screen(app, tmp_path):
+    """回归：拖动到屏幕右边缘会「卡半边」。
+
+    根因是 mouseMoveEvent 直接 move(鼠标位置 - 拖拽偏移)，没有任何夹取。
+    窗口实测 176×239（气泡在金娘上方，比金娘本体高 79px），
+    拖到最右时右边界会超出屏幕 155px，气泡文字与金娘右半边被裁掉。
+    """
+    w = _window(app, tmp_path)
+    for _ in range(5):
+        app.processEvents()
+    screen = w.screen().availableGeometry()
+
+    _drag_to(w, screen.right() + 500, w.y() + 10)
+    for _ in range(3):
+        app.processEvents()
+
+    geo = w.frameGeometry()
+    assert geo.right() <= screen.right(), f"窗口右边界 {geo.right()} 超出屏幕 {screen.right()}"
+    assert geo.left() >= screen.left(), "窗口左边界在屏幕外"
+
+
+def test_drag_to_bottom_edge_keeps_window_inside_screen(app, tmp_path):
+    """回归：拖动到屏幕下边缘应被夹住（此前下边界可超出 218px）。"""
+    w = _window(app, tmp_path)
+    for _ in range(5):
+        app.processEvents()
+    screen = w.screen().availableGeometry()
+
+    _drag_to(w, w.x() + 10, screen.bottom() + 500)
+    for _ in range(3):
+        app.processEvents()
+
+    geo = w.frameGeometry()
+    assert geo.bottom() <= screen.bottom(), f"窗口下边界 {geo.bottom()} 超出屏幕 {screen.bottom()}"
+    assert geo.top() >= screen.top(), "窗口上边界在屏幕外"
+
+
+def test_drag_to_top_left_corner_is_clamped(app, tmp_path):
+    """反方向同样要夹取：拖到左上角不能把窗口推到屏幕外。"""
+    w = _window(app, tmp_path)
+    for _ in range(5):
+        app.processEvents()
+    screen = w.screen().availableGeometry()
+
+    _drag_to(w, screen.left() - 800, screen.top() - 800)
+    for _ in range(3):
+        app.processEvents()
+
+    geo = w.frameGeometry()
+    assert geo.left() >= screen.left(), "窗口左边界越出屏幕"
+    assert geo.top() >= screen.top(), "窗口上边界越出屏幕"
+
+
+def test_clamp_allows_inner_positions_untouched(app, tmp_path):
+    """夹取只处理越界，屏幕内的合法位置必须原样保留（不能把窗口吸到角落）。"""
+    from PySide6.QtCore import QPoint
+
+    w = _window(app, tmp_path)
+    for _ in range(5):
+        app.processEvents()
+    screen = w.screen().availableGeometry()
+    width, height = w._window_size()
+
+    inner_x = screen.left() + (screen.width() - width) // 2
+    inner_y = screen.top() + (screen.height() - height) // 2
+    assert w._clamp_to_screen(inner_x, inner_y) == QPoint(inner_x, inner_y)
+
+
+def test_clamp_keeps_whole_window_visible(app, tmp_path):
+    """夹取后整个窗口（含气泡与金娘）都应落在可用区内。"""
+    w = _window(app, tmp_path)
+    for _ in range(5):
+        app.processEvents()
+    screen = w.screen().availableGeometry()
+
+    far = w._clamp_to_screen(screen.right() + 9999, screen.bottom() + 9999)
+    w.move(far)
+    for _ in range(3):
+        app.processEvents()
+
+    geo = w.frameGeometry()
+    assert screen.contains(geo), f"夹取后窗口仍不在可用区内：{geo} ⊄ {screen}"
+
+
+def test_clamp_is_noop_without_screen(app, tmp_path, monkeypatch):
+    """极端环境（无屏幕信息）不得抛异常，应原样返回坐标。"""
+    from PySide6.QtCore import QPoint
+
+    import gold_pet.ui as ui_mod
+
+    w = _window(app, tmp_path)
+    monkeypatch.setattr(ui_mod.QApplication, "screens", staticmethod(lambda: []))
+    monkeypatch.setattr(w, "screen", lambda: None)
+    monkeypatch.setattr(ui_mod.QApplication, "primaryScreen", staticmethod(lambda: None))
+
+    assert w._clamp_to_screen(123, 456) == QPoint(123, 456)
+
+
+def test_clamp_falls_back_when_screen_smaller_than_window(app, tmp_path, monkeypatch):
+    """屏幕比窗口还小时退化为「左上角入屏」，不得算出屏幕外的负坐标。"""
+    from PySide6.QtCore import QPoint, QRect
+
+    class _TinyScreen:
+        def availableGeometry(self):
+            return QRect(0, 0, 50, 40)
+
+    w = _window(app, tmp_path)
+    monkeypatch.setattr(w, "screen", lambda: _TinyScreen())
+
+    point = w._clamp_to_screen(9999, 9999)
+    assert point.x() <= 50 and point.y() <= 40
+    assert point.x() >= 0 and point.y() >= 0
+    assert isinstance(point, QPoint)
+
+
+def test_clamp_picks_screen_containing_target(app, tmp_path):
+    """多屏：目标点在哪块屏幕，就按那块屏幕夹取（跨屏拖动才顺滑）。"""
+    from PySide6.QtCore import QRect
+
+    class _Screen:
+        def __init__(self, rect):
+            self._rect = rect
+
+        def availableGeometry(self):
+            return self._rect
+
+    left = _Screen(QRect(0, 0, 1920, 1080))
+    right = _Screen(QRect(1920, 0, 1920, 1080))
+    w = _window(app, tmp_path)
+    w.resize(176, 239)
+
+    # 目标点在右屏内 → 应按右屏边界夹取，左边界允许 > 0（不被拽回左屏）
+    point = w._clamp_to_screen(3000, 100, screens_override=[left, right])
+    assert point.x() >= 1920, f"跨屏拖动被拽回左屏：x={point.x()}"
+
+
 def test_long_press_without_move_triggers_shy(app, tmp_path):
-    """按住不动满 600ms 仍应正常触发撒娇。"""
     from PySide6.QtCore import QEvent, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
 

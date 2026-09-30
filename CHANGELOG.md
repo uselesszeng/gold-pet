@@ -5,6 +5,51 @@
 
 ---
 
+## [0.6.0] - 2026-10-01
+
+**主题：桌宠形象整体替换 —— 社区同人 DeepSeek 鲸鱼娘（专业画师素材）**
+
+### 变更
+
+- **形象替换**：自绘金色鲸鱼女仆 → 社区同人 DeepSeek 鲸鱼娘
+  （来源 [aceice01/dsh-whale-pet](https://github.com/aceice01/dsh-whale-pet)，
+  192x208 GIF、真透明背景、共 35 帧）。7 个状态映射：
+
+  | 状态 | GIF | 帧数 | 间隔 |
+  |---|---|---|---|
+  | idle 待机 | idle | 6 | 180ms |
+  | up 上涨 | jumping | 5 | 170ms |
+  | down 下跌 | failed | 8 | 150ms |
+  | pat 摸头 | waving | 4 | 175ms |
+  | shy 害羞 | waiting | 6 | 170ms |
+  | loading 刷新 | running | 6 | 140ms |
+  | offline 断网 | waiting | 6 | 170ms |
+
+  间隔取各 GIF 实测平均帧延迟。
+- **应用与托盘图标同步更换**为鲸鱼娘站姿（`assets/icon.png` / `icon.ico`）。
+
+### 新增
+
+- `tools/import_dsh_assets.py`：GIF → 序列帧导入管线
+  （`ImageSequence` 解帧 → 等比缩放 160 高 → 画布居中 → 输出 `{state}_{i}.png`；
+  打印各状态实测帧数/平均延迟供 `STATES` 粘贴；同时生成图标）。
+  以后换任何 GIF 素材，改 `STATE_MAP` 重跑即可。
+- README 新增「素材致谢与许可」「v0.6.0 形象升级」节；「改形象」指引改为双路线
+  （A 导入外部 GIF / B PIL 自绘）。
+
+### 移除
+
+- 无代码移除。旧自绘形象保留双备份：git 历史（tag v0.5.6）+ `assets/_backup_v055/`
+  （不入库），`tools/gen_assets.py` 可随时重新生成。
+
+### 许可
+
+- 素材遵循其**非商业使用许可**：本项目免费无营利，属许可允许的非商业分发；
+  已按要求在 README 与程序「关于」窗口保留来源致谢与许可声明。
+- 本项目代码部分仍为 MIT。
+
+---
+
 ## [0.5.6] - 2026-09-30
 
 **主题：提醒去重语义修正 —— 「冷却到期就重报」改为「状态变化才提醒」**

@@ -29,3 +29,4 @@ version_info.txt
 
 # 发布包暂存（体积大，不进仓库；通过 Release 附件分发）
 release/
+_backup_v055/

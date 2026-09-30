@@ -1,8 +1,8 @@
 # 🐥 黄金桌宠（Gold Pet）
 
-一只住在桌面右下角的「金娘」——**金发鲸鱼女仆**，**实时盯着金价**：涨了笑、跌了哭，点一下切换 国内元/克 ↔ 国际美元/盎司。
+一只住在桌面右下角的「金娘」——**鲸鱼女仆**（v0.6.0 起采用社区同人 DeepSeek 鲸鱼娘形象），**实时盯着金价**：涨了笑、跌了哭，点一下切换 国内元/克 ↔ 国际美元/盎司。
 
-![各状态一览](docs/assets/pet-v055-states.png)
+![各状态一览](docs/assets/pet-v060-states.png)
 
 > 平台支持：**Windows 首选**（提供免安装 exe），**macOS / Linux 亦支持**（源码运行，见下方说明）。
 > Android / 鸿蒙 HAP 见 [docs/PRD.md](docs/PRD.md) 的二期、三期规划。
@@ -171,9 +171,10 @@ gold-pet/
 ├── docs/PRD.md          产品需求文档
 ├── gold_pet/            源码（config / price / notifier / tray_icon / ui /
 │                        autostart / shortcut / paths / main）
-├── assets/pet/*.png     动画帧（tools/gen_assets.py 生成）
+├── assets/pet/*.png     动画帧（由 tools/import_dsh_assets.py 从 GIF 导入）
 ├── assets/icon.ico      应用图标
-├── tools/gen_assets.py  素材生成脚本（改配色/表情后重跑）
+├── tools/import_dsh_assets.py  外部 GIF 素材导入（解帧/缩放/画布居中）
+├── tools/gen_assets.py  旧版自绘素材生成脚本（备用，可一键回退旧形象）
 ├── tools/diag_*.py      只读诊断脚本（尺寸 / 资源占用 / 边缘拖动）
 ├── requirements.txt
 ├── run.bat / run.py     Windows 开发运行
@@ -185,7 +186,8 @@ gold-pet/
 
 | 想改什么 | 改哪里 |
 |---|---|
-| 金娘的样子/颜色/表情 | `tools/gen_assets.py`，改完 `python tools/gen_assets.py` |
+| 金娘的样子（换成别的 GIF 素材） | `tools/import_dsh_assets.py` 的 `STATE_MAP`，改完重跑 |
+| 金娘的样子（代码自绘） | `tools/gen_assets.py`，改完重跑（v0.5.5 金色版，可随时切回） |
 | 默认单位、刷新间隔 | `gold_pet/config.py` 的 `DEFAULTS` 或设置面板 |
 | 涨红跌绿换成涨绿跌红 | `gold_pet/ui.py` 的 `UP_COLOR` / `DOWN_COLOR` |
 | 换数据源 | `gold_pet/price.py` 的 `SINA_URL` 与 `parse_snapshot` |
@@ -194,8 +196,18 @@ gold-pet/
 
 ### 改形象前请先读这段
 
-金娘是**纯代码绘制**的（无外部图片素材），改 `tools/gen_assets.py` 后重跑即可。
-三个容易踩的坑：
+v0.6.0 起有**两条形象管线**，按需选择：
+
+**路线 A：导入外部 GIF 素材（当前使用，推荐）**
+
+1. 把素材 GIF 放进一个目录，命名 `{状态名}.gif`（idle / up / down / pat / shy / loading / offline）；
+2. 改 `tools/import_dsh_assets.py` 里的 `STATE_MAP` 指向新目录，重跑：
+   `python tools/import_dsh_assets.py <gif目录>`；
+3. 脚本会自动解帧、等比缩放到 160 高、画布居中、输出序列帧，
+   并打印每个状态的帧数与建议间隔 —— 粘贴进 `gold_pet/ui.py` 的 `STATES`；
+4. 跑 `python -m pytest tests/test_assets.py` 确认结构契约。
+
+**路线 B：PIL 纯代码自绘**（`tools/gen_assets.py`，v0.5.5 金色版即此产物），三个容易踩的坑：
 
 | 坑 | 说明 |
 |---|---|
@@ -308,6 +320,23 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
 **为何 mac/Linux 不提供预编译包？** 本项目的 CI 运行在 CNB 官方托管节点上，而官方节点仅提供
 Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授权限制无法在云端 CI 构建。
 故 mac/Linux 采用「源码运行」方式，体验一致，仅多一步安装 Python。
+
+## 素材致谢与许可
+
+- **桌宠形象**：v0.6.0 起采用 [aceice01/dsh-whale-pet](https://github.com/aceice01/dsh-whale-pet)
+  提供的社区同人 DeepSeek 鲸鱼娘动画（原始出处 codex-pet-DeepSeek-girl，版权归原作者所有）。
+- 该素材按其**非商业使用许可**分发：本项目为免费、无营利的非商业用途，符合许可范围；
+  若你将本程序用于商业场景，请自行移除该素材或取得原作者授权。
+- 本项目代码部分仍为 MIT；素材部分的版权遵循其原作者声明。
+
+## v0.6.0 形象升级
+
+- **桌宠形象整体替换**：自绘金色鲸鱼女仆 → 社区同人 DeepSeek 鲸鱼娘（蓝发女仆+鲸鱼尾，专业画师素材）。
+  7 个状态全部换新：待机摇摆 / 上涨跳跃 / 下跌沮丧 / 摸头挥手 / 害羞合十 / 刷新跑动 / 断网等待。
+- **应用与托盘图标同步更换**为鲸鱼娘站姿。
+- 新增 `tools/import_dsh_assets.py`：GIF → 序列帧导入管线（解帧 / 等比缩放 / 画布居中 /
+  实测平均帧延迟输出 STATES 建议值），以后换任何 GIF 素材都能一键接入。
+- 旧形象可随时回退：`python tools/gen_assets.py`（自绘管线保留），或从 `assets/_backup_v055/` 取回。
 
 ## v0.5.6 提醒修复
 

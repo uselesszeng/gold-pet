@@ -56,14 +56,16 @@ from .paths import alert_history_path, asset_dir
 from .price import METALS, Snapshot, is_market_open
 
 # 每种状态的帧数与播放间隔（毫秒）
+# v0.6.0：素材替换为 dsh-whale-pet 鲸鱼娘（帧数/间隔按各 GIF 实测平均延迟）
+# 素材来源与许可见 README「素材致谢与许可」
 STATES = {
-    "idle": (4, 600),
-    "up": (2, 320),
-    "down": (2, 320),
-    "pat": (2, 300),
-    "shy": (3, 260),
-    "loading": (2, 400),
-    "offline": (1, 1000),
+    "idle": (6, 180),
+    "up": (5, 170),
+    "down": (8, 150),
+    "pat": (4, 175),
+    "shy": (6, 170),
+    "loading": (6, 140),
+    "offline": (6, 170),
 }
 # 互动台词
 LINES = {
@@ -1128,7 +1130,12 @@ class AboutDialog(QDialog):
             "行情数据仅供参考，<b>不构成任何投资建议</b>。<br>"
             "本程序不采集任何个人信息，配置与历史仅存于本机。<br><br>"
             "<b>开源许可</b><br>MIT License · "
-            "<a href='https://cnb.cool/TJ-coding/gold-pet'>cnb.cool/TJ-coding/gold-pet</a>"
+            "<a href='https://cnb.cool/TJ-coding/gold-pet'>cnb.cool/TJ-coding/gold-pet</a><br><br>"
+            "<b>形象素材致谢</b><br>"
+            "鲸鱼娘动画来自 "
+            "<a href='https://github.com/aceice01/dsh-whale-pet'>aceice01/dsh-whale-pet</a>"
+            "（社区同人素材，版权归原作者），"
+            "按其非商业使用许可分发，本项目为免费非商业用途。"
             "</div>"
         )
         body.setWordWrap(True)

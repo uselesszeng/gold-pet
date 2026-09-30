@@ -18,6 +18,20 @@
 > 全部版本见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases)。
 > 校验文件：`GoldPet-v0.6.0-win64.exe.sha256`。
 
+### 喜欢哪个形象，就下哪个版本
+
+桌宠形象经历了多次更换，每个 Release 的 exe 都完整保留着**当时的形象**，
+旧版随时可下载，不会丢：
+
+| 形象 | 对应版本 | 直链 |
+|---|---|---|
+| 🐋 **DeepSeek 鲸鱼娘**（蓝发女仆，画师素材） | v0.6.0（当前） | [下载](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.6.0/GoldPet-v0.6.0-win64.exe) |
+| 🥇 **金色鲸鱼女仆**（PIL 自绘，金主色） | v0.5.5 ~ v0.5.6 | [v0.5.5](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.5/GoldPet-v0.5.5-win64.exe) · [v0.5.6](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.6/GoldPet-v0.5.6-win64.exe)（含提醒修复，推荐） |
+| 🐥 早期自绘少女 | v0.4.1 ~ v0.5.4 | 见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases) |
+
+> 从源码运行的用户：两版图标已归档在 `assets/icons/`，
+> `python tools/switch_icon.py v055` / `v060` 一键切换（详见该脚本说明）。
+
 ### 第一次打开怎么用？
 
 双击 exe 后，金娘会出现在**桌面右下角**，并弹出一个引导窗口，问你
@@ -188,6 +202,7 @@ gold-pet/
 |---|---|
 | 金娘的样子（换成别的 GIF 素材） | `tools/import_dsh_assets.py` 的 `STATE_MAP`，改完重跑 |
 | 金娘的样子（代码自绘） | `tools/gen_assets.py`，改完重跑（v0.5.5 金色版，可随时切回） |
+| 应用/托盘图标的形象版本 | `tools/switch_icon.py v055` 或 `v060`（归档于 `assets/icons/`） |
 | 默认单位、刷新间隔 | `gold_pet/config.py` 的 `DEFAULTS` 或设置面板 |
 | 涨红跌绿换成涨绿跌红 | `gold_pet/ui.py` 的 `UP_COLOR` / `DOWN_COLOR` |
 | 换数据源 | `gold_pet/price.py` 的 `SINA_URL` 与 `parse_snapshot` |

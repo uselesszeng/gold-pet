@@ -11,12 +11,12 @@
 
 | 平台 | 方式 | 说明 |
 |---|---|---|
-| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.7.2-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.2/GoldPet-v0.7.2-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
+| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.7.3-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.3/GoldPet-v0.7.3-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
 | **macOS** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 | **Linux** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 
 > 全部版本见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases)。
-> 校验文件：`GoldPet-v0.7.2-win64.exe.sha256`。
+> 校验文件：`GoldPet-v0.7.3-win64.exe.sha256`。
 
 ### 喜欢哪个形象，就下哪个版本
 
@@ -25,7 +25,7 @@
 
 | 形象 | 对应版本 | 直链 |
 |---|---|---|
-| 🐋 **DeepSeek 鲸鱼娘**（蓝发女仆，画师素材） | v0.6.0（当前） | [下载 v0.7.2（当前，安静档静止）](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.2/GoldPet-v0.7.2-win64.exe) · [v0.6.0](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.6.0/GoldPet-v0.6.0-win64.exe) |
+| 🐋 **DeepSeek 鲸鱼娘**（蓝发女仆，画师素材） | v0.6.0（当前） | [下载 v0.7.3（当前，全局图标统一）](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.3/GoldPet-v0.7.3-win64.exe) · [v0.6.0](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.6.0/GoldPet-v0.6.0-win64.exe) |
 | 🥇 **金色鲸鱼女仆**（PIL 自绘，金主色） | v0.5.5 ~ v0.5.6 | [v0.5.5](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.5/GoldPet-v0.5.5-win64.exe) · [v0.5.6](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.6/GoldPet-v0.5.6-win64.exe)（含提醒修复，推荐） |
 | 🐥 早期自绘少女 | v0.4.1 ~ v0.5.4 | 见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases) |
 
@@ -345,6 +345,12 @@ Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授�
 - 该素材按其**非商业使用许可**分发：本项目为免费、无营利的非商业用途，符合许可范围；
   若你将本程序用于商业场景，请自行移除该素材或取得原作者授权。
 - 本项目代码部分仍为 MIT；素材部分的版权遵循其原作者声明。
+
+## v0.7.3 全局图标统一
+
+- **弹窗「黄金小鸟」退场**：「关于」「首启引导」窗口顶部遗留的小鸡 emoji 🐥
+  换成鲸鱼 🐋；四个弹窗（设置 / 提醒历史 / 关于 / 引导）标题栏显式统一鲸鱼娘图标。
+- 台词形象勘误：鲸娘没有王冠（那是金娘时代设定），相关台词已改。
 
 ## v0.7.2 安静档真安静
 

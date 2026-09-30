@@ -889,3 +889,44 @@ def test_apply_activity_speaks_level_line(app, tmp_path):
     w.bubble.setText(before)
     w._apply_activity()  # 档位没变：不应说话
     assert w.bubble.text() == before
+
+
+# ---------------------------------------------------------------- v0.7.3 全局图标统一
+
+
+def test_dialogs_have_whale_icon(app, tmp_path):
+    """四个弹窗显式设置鲸鱼娘标题栏图标，不得回落 Qt 默认小鸟。"""
+    from gold_pet.ui import (
+        AboutDialog,
+        AlertHistoryDialog,
+        FirstRunDialog,
+        SettingsDialog,
+        _app_icon,
+    )
+
+    icon = _app_icon()
+    assert not icon.isNull(), "assets/icon.png 应存在（鲸鱼娘）"
+    w = _window(app, tmp_path)
+    dialogs = [
+        SettingsDialog(w.cfg, w),
+        AboutDialog(w),
+        AlertHistoryDialog(w.notifier, w),
+        FirstRunDialog(w),
+    ]
+    for dlg in dialogs:
+        assert not dlg.windowIcon().isNull(), f"{type(dlg).__name__} 缺窗口图标"
+        same = dlg.windowIcon().pixmap(64, 64).toImage() == icon.pixmap(64, 64).toImage()
+        assert same, f"{type(dlg).__name__} 图标不是统一鲸鱼娘"
+        dlg.deleteLater()
+
+
+def test_no_old_mascot_emoji_regression():
+    """防回潮：不得再出现旧时代小鸡/王冠形象（v0.6.0 起为鲸鱼娘）。"""
+
+    src = Path(__file__).resolve().parent.parent / "gold_pet" / "ui.py"
+    text = src.read_text(encoding="utf-8")
+    for bad in ("🐥", "🐤", "王冠"):
+        assert bad not in text, f"ui.py 出现旧形象元素「{bad}」"
+    for group, lines in LINES.items():
+        for line in lines:
+            assert "🐥" not in line and "王冠" not in line, f"台词组 {group} 有旧形象：{line}"

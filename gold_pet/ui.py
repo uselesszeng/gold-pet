@@ -77,7 +77,7 @@ STATES = {
 # 互动台词（v0.7 扩充：每组加量减少重复感，并新增关怀提醒三组）
 LINES = {
     "up": [
-        "金价涨啦，鲸娘的王冠更亮了✨",
+        "金价涨啦，鲸娘的尾巴翘起来啦✨",
         "涨！今天的鲸娘心情超好~",
         "要不要趁现在去逛逛金店？",
         "红彤彤的，看着就喜庆~",
@@ -248,6 +248,17 @@ def pick_fatty_line(count: int) -> str:
     """按「连续被叫大肥鱼」的次数挑台词：1-2 反驳 / 3-4 生气 / 5+ 记仇。"""
     tier = 1 if count <= 2 else (2 if count <= 4 else 3)
     return random.choice(FATTY_LINES[tier])
+
+
+def _app_icon() -> QIcon:
+    """应用统一图标（鲸鱼娘，v0.7.3）。
+
+    为什么弹窗要显式 setWindowIcon：QDialog 只依赖「应用级/父窗口继承」时，
+    实测标题栏会回落成 Qt 默认小鸟图标（父窗口 PetWindow 是无边框 Qt.Tool，
+    图标没有真正落到窗口句柄上）。显式设置后 Windows 标题栏稳定显示鲸鱼娘。
+    """
+    path = asset_dir() / "icon.png"
+    return QIcon(str(path)) if path.exists() else QIcon()
 
 
 class PriceWorker(QThread):
@@ -1020,6 +1031,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.cfg = cfg
         self.setWindowTitle("黄金桌宠 · 设置")
+        self.setWindowIcon(_app_icon())  # v0.7.3：统一鲸鱼娘标题栏图标
         self.setModal(True)
         # 限制宽度，避免表单被拉成满屏（QFormLayout 会按最长行撑开窗口）
         self.setMinimumWidth(380)
@@ -1348,6 +1360,7 @@ class AlertHistoryDialog(QDialog):
         super().__init__(parent)
         self.notifier = notifier
         self.setWindowTitle("提醒历史")
+        self.setWindowIcon(_app_icon())  # v0.7.3：统一鲸鱼娘标题栏图标
         self.setModal(True)
         self.setMinimumSize(420, 320)
 
@@ -1390,10 +1403,11 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("关于 黄金桌宠")
+        self.setWindowIcon(_app_icon())  # v0.7.3：统一鲸鱼娘标题栏图标
         self.setModal(True)
         self.setMinimumWidth(360)
 
-        title = QLabel('<div style="font-size:16px;font-weight:600">🐥 黄金桌宠</div>')
+        title = QLabel('<div style="font-size:16px;font-weight:600">🐋 黄金桌宠</div>')
         version = QLabel(f"版本 {__version__}")
         version.setStyleSheet("color: #666;")
 
@@ -1451,11 +1465,12 @@ class FirstRunDialog(QDialog):
     def __init__(self, parent=None, has_tray: bool = True):
         super().__init__(parent)
         self.setWindowTitle("欢迎使用 黄金桌宠")
+        self.setWindowIcon(_app_icon())  # v0.7.3：统一鲸鱼娘标题栏图标
         self.setModal(True)
         self.setMinimumWidth(420)
         self.setMaximumWidth(520)
 
-        title = QLabel('<div style="font-size:16px;font-weight:600">🐥 鲸娘来啦～</div>')
+        title = QLabel('<div style="font-size:16px;font-weight:600">🐋 鲸娘来啦～</div>')
         intro = QLabel(
             "<div style='font-size:12px;line-height:1.7'>"
             "鲸娘会一直<b>待在桌面右下角</b>陪你盯金价，"

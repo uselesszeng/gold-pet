@@ -45,23 +45,25 @@ $:
           script: |
             python -m pytest tests --cov=gold_pet --cov-report=term-missing
 
-  # 打 tag 时自动把 release/ 目录下的发布产物挂到同名 Release 附件。
+  # 打 tag 时的发布检查。
   #
-  # 前置条件：
-  #   1. 该 tag 必须已存在对应的 Release（可在网页端或用
-  #      tools/cnb_release_upload.py 手动创建），否则插件会报错；
-  #   2. 待上传的 exe / sha256 需在 release/ 目录内随 tag 一起提交。
-  #
-  # 说明：官方托管节点只有 Linux，无法在此构建 Windows exe，
-  #       故 Windows 产物仍走「本地构建 + 提交到 release/ + 打 tag」的方式。
+  # 为什么不在这里自动上传附件？
+  #   1. `release/` 已列入 .gitignore（46MB 的 exe 不应进入 git 历史），
+  #      流水线的工作区里根本没有这个目录，attachments 插件无从下手；
+  #   2. CNB 官方托管节点只有 Linux，无法在此构建 Windows exe。
+  # 因此实际发版流程是「本地构建 → 手动上传」（见 README「发版流程」）。
+  # 这里只做一件事：确认这个 tag 已经建好 Release，否则提醒开发者补建。
   tag_push:
-    - name: attach-release-assets
+    - name: check-release
       stages:
-        - name: upload release assets
-          image: cnbcool/attachments:latest
-          settings:
-            # tag / commit 都不传时，tag_push 事件取 $CNB_BRANCH 作为 tag
-            attachments:
-              - "./release/*.exe"
-              - "./release/*.sha256"
-            ttl: 0 # 永久保留
+        - name: 提示补建 Release
+          script: |
+            echo "已推送标签：$CNB_BRANCH"
+            echo ""
+            echo "接下来请在本地执行（两选一）："
+            echo "  A. 网页端建 Release 后，用工具上传产物："
+            echo "     python tools/cnb_release_upload.py TJ-coding/gold-pet <release_id> \\"
+            echo "         release/GoldPet-$CNB_BRANCH-win64.exe --tag $CNB_BRANCH"
+            echo "  B. 只建 Release、产物稍后补传（Release 页面支持直接拖拽上传）。"
+            echo ""
+            echo "详见 README「发版流程」章节。"

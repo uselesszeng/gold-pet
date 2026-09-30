@@ -28,9 +28,14 @@
 
 ### 变更
 
-- **`.cnb.yml` 新增 `tag_push` 流水线**：打 tag 时自动把 `release/` 目录下的
-  exe 与 sha256 挂到同名 Release 附件，省去手工上传。
-  前置条件是该 tag 已存在对应 Release。
+- **`.cnb.yml` 新增 `tag_push` 流水线**：打标签时打印发版提醒与具体命令，
+  引导维护者完成 Release 附件的创建与上传。
+
+  > 说明：最初打算用官方 `cnbcool/attachments:latest` 插件自动挂载附件，
+  > 但 `release/` 已列入 `.gitignore`（46MB 的 exe 不应进入 git 历史），
+  > 流水线工作区里根本不存在该目录，插件无从下手。
+  > 权衡后选择「保留干净的 git 历史 + 手动上传」，
+  > 由流水线负责提醒，避免忘记发版。
 
 ### 工程
 

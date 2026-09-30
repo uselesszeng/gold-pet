@@ -9,12 +9,12 @@
 
 | 平台 | 方式 | 说明 |
 |---|---|---|
-| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.5.1-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.1/GoldPet-v0.5.1-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
+| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.5.2-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.2/GoldPet-v0.5.2-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
 | **macOS** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 | **Linux** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 
 > 全部版本见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases)。
-> 校验文件：`GoldPet-v0.5.1-win64.exe.sha256`（SHA256 `871f7e36...a8db60`）。
+> 校验文件：`GoldPet-v0.5.2-win64.exe.sha256`（SHA256 `871f7e36...a8db60`）。
 
 ### Windows 首次运行提示
 
@@ -214,6 +214,16 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
 Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授权限制无法在云端 CI 构建。
 故 mac/Linux 采用「源码运行」方式，体验一致，仅多一步安装 Python。
 
+## v0.5.2 发版
+
+本版**无功能改动**，聚焦「别人拿到链接能不能装上跑起来」。
+
+- **Windows 免安装 exe 正式发布**，附 SHA256 校验文件（此前仓库只有源码，他人无法直接使用）
+- 新增 [docs/从源码运行.md](docs/从源码运行.md)：macOS / Linux 新手安装指南与排错表
+- 新增 `run.sh`：mac/Linux 一键脚本，自动建虚拟环境并装依赖
+- 新增 `tools/cnb_release_upload.py`：命令行上传发布产物到 Release 附件
+- `.cnb.yml` 新增 tag_push 流水线：打标签时自动挂载 `release/` 目录产物
+
 ## v0.5.1 修复
 
 - **设置面板撑满屏幕**：此前窗口尺寸实测 1920×1152，占满整屏且底部按钮被推到屏幕外。
@@ -264,6 +274,8 @@ Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授�
 
 ## 发版流程（维护者）
 
+`release/` 目录已列入 `.gitignore`——**46MB 的 exe 不进 git 历史**，只通过 Release 附件分发。
+
 ```bash
 # 1. 改版本号 gold_pet/__init__.py，补 CHANGELOG.md 与 程序修改点.md
 # 2. 质量门禁
@@ -271,13 +283,28 @@ lint.bat
 # 3. 打包（产物 dist/黄金桌宠.exe）
 build.bat
 # 4. 准备发布包（规范命名 + 校验和）
-#    把 dist/黄金桌宠.exe 复制为 release/GoldPet-v<版本>-win64.exe
-#    生成 .sha256 校验文件
-# 5. 打 tag 并推送
-git tag v<版本> && git push origin main && git push origin --tags
-# 6. 创建 Release 后上传附件（tag 必须先有对应 Release）
-python tools/cnb_release_upload.py TJ-coding/gold-pet <release_id> release/GoldPet-v<版本>-win64.exe --tag v<版本>
+#    复制为 release/GoldPet-v<版本>-win64.exe，再生成 .sha256
+cd release && sha256sum GoldPet-v<版本>-win64.exe > GoldPet-v<版本>-win64.exe.sha256 && cd ..
+# 5. 推送代码并打 tag
+git push origin main
+git tag -a v<版本> -m "v<版本>" && git push origin v<版本>
+# 6. 创建 Release（网页端「发布 → 新建」，或走 REST POST /{slug}/-/releases）
+# 7. 上传 exe 与 sha256 到该 Release 的附件
+python tools/cnb_release_upload.py TJ-coding/gold-pet <release_id> \
+    release/GoldPet-v<版本>-win64.exe --tag v<版本>
 ```
+
+**上传原理**（CNB 未在公开文档中说明，实测确认）分三步：
+
+1. `POST /{slug}/-/releases/{id}/asset-upload-url`，body `{"asset_name","size"}` → 得到预签名 `upload_url` 与 `verify_url`
+2. `PUT {upload_url}` 直传对象存储（**不经** CNB 业务域）
+3. `POST {verify_url}` 确认，附件才正式挂到 Release
+
+避坑（`tools/cnb_release_upload.py` 已处理）：
+
+- `Accept` 头必须用 `application/json`；用 `application/vnd.cnb.api+json` 会被 406 拒绝
+- 第 3 步必须 **POST**，用 GET 会 404
+- `verify_url` 必须原样使用，其中已含 URL 编码的对象键
 
 > 上传附件走 CNB OpenAPI 三步流程：取预签名链接 → PUT 文件 → **POST** 确认。
 > 确认步骤必须用 POST（官方插件 request 默认值即 POST，用 GET 会 404）。

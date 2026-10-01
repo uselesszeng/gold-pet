@@ -58,6 +58,7 @@ from .config import (
     SPARK_RANGE_NAMES,
     Config,
 )
+from .control_server import ControlServer
 from .notifier import RULE_CONFIG_KEYS, Alert, Notifier, filter_series, in_quiet_hours
 from .paths import alert_history_path, asset_dir
 from .price import METALS, Snapshot, is_market_open
@@ -400,6 +401,10 @@ class PetWindow(QWidget):
             self._render(self.snapshot, silent=True)
         if auto_refresh:
             self.refresh()
+
+        # AI 控制服务（v0.8）：默认开启，仅 127.0.0.1 + token，供 MCP 桥接进程调用
+        self.control: ControlServer | None = None
+        self._start_control()
 
     # ------------------------------------------------------------------ 构建
     def _load_frames(self) -> None:
@@ -934,6 +939,7 @@ class PetWindow(QWidget):
             self._apply_window_flags()
             self._apply_interval()
             self._apply_activity()  # v0.7：活跃度立即生效，不用重启
+            self._apply_control_setting()  # v0.8：AI 控制开关立即启停
             self.care.reset(time.time())  # v0.7：关怀提醒按新配置重排
             self.bubble.setVisible(bool(self.cfg.get("show_bubble", True)))
             if before != {key: self.cfg.get(key) for key in RULE_CONFIG_KEYS}:
@@ -985,6 +991,83 @@ class PetWindow(QWidget):
         if self.snapshot is not None:
             self._render(self.snapshot, silent=True)
 
+    # ------------------------------------------------------- AI 控制（v0.8）
+    def _start_control(self) -> None:
+        """按配置启动 AI 控制服务（幂等：已在跑则不动）。"""
+        if not bool(self.cfg.get("control_enabled", True)):
+            logging.getLogger("gold_pet").info("AI 控制服务未启用（配置关闭）")
+            return
+        if self.control is not None and self.control.isRunning():
+            return
+        self.control = ControlServer(state_reader=self._control_state)
+        self.control.action_received.connect(self._handle_control)
+        self.control.start()
+
+    def _apply_control_setting(self) -> None:
+        """设置面板保存后按需启停 AI 控制服务（v0.8）。"""
+        enabled = bool(self.cfg.get("control_enabled", True))
+        running = self.control is not None and self.control.isRunning()
+        if enabled and not running:
+            self._start_control()
+        elif not enabled and running:
+            self._stop_control()
+
+    def _stop_control(self) -> None:
+        """停掉 AI 控制服务并清理发现文件（退出路径与设置开关共用）。"""
+        if self.control is None:
+            return
+        self.control.stop()
+        self.control.wait(5000)
+        self.control = None
+        logging.getLogger("gold_pet").info("AI 控制服务已停止")
+
+    def _control_state(self) -> dict:
+        """HTTP 线程读取的只读状态快照。
+
+        只读纯 Python 属性（str/int，GIL 原子），绝不调用 QWidget 方法
+        （Qt 界面对象只允许主线程触碰）。
+        """
+        return {
+            "app": "gold-pet",
+            "version": __version__,
+            "state": self.state,
+            "activity_level": self._activity_level,
+            "fatty_count": self.fatty_count,
+        }
+
+    def _handle_control(self, action: dict) -> None:
+        """AI 控制动作统一入口（UI 线程槽，由控制服务经信号转发）。"""
+        name = action.get("action")
+        if name == "say":
+            text = action.get("text")
+            if isinstance(text, str) and text.strip():
+                self.bubble_say(render_line_html(text.strip()), 4000)
+            else:
+                self.speak(action.get("mood"))
+        elif name == "play":
+            state = action.get("state")
+            if state in STATES:
+                self._play_state(state, 2500)
+        elif name == "pat":
+            self.pat()
+        elif name == "tease":
+            self.tease_fatty()
+        elif name == "move":
+            self._control_move(action)
+        logging.getLogger("gold_pet").info("AI 控制动作：%s", action)
+
+    def _control_move(self, action: dict) -> None:
+        """按 AI 指令挪动窗口：dx/dy 相对 或 x/y 绝对，夹取回屏幕内。"""
+        if "dx" in action and "dy" in action:
+            x = self.x() + int(action["dx"])
+            y = self.y() + int(action["dy"])
+        else:
+            x, y = int(action["x"]), int(action["y"])
+        point = self._clamp_to_screen(x, y)
+        self.move(point)
+        self.cfg.set("pos", [point.x(), point.y()])
+        self.cfg.save()
+
     def open_alert_history(self) -> None:
         """提醒历史窗口（v0.5 提醒中心）。"""
         AlertHistoryDialog(self.notifier, self).exec()
@@ -1004,6 +1087,7 @@ class PetWindow(QWidget):
     def quit_app(self) -> None:
         self.cfg.set("pos", [self.x(), self.y()])
         self.cfg.save()
+        self._stop_control()  # v0.8：退出前停 AI 控制服务 + 删发现文件
         self.anim_timer.stop()
         self.refresh_timer.stop()
         worker = getattr(self, "_worker", None)
@@ -1020,6 +1104,7 @@ class PetWindow(QWidget):
         else:
             self.cfg.set("pos", [self.x(), self.y()])
             self.cfg.save()
+            self._stop_control()  # v0.8：退出前停 AI 控制服务 + 删发现文件
             event.accept()
             QApplication.quit()
 
@@ -1170,6 +1255,10 @@ class SettingsDialog(QDialog):
         self.eye_check = QCheckBox("护眼提醒（每 45 分钟）")
         self.eye_check.setChecked(bool(cfg.get("care_eye_enabled", False)))
 
+        # ---- v0.8 AI 控制服务 ----
+        self.control_check = QCheckBox("启用 AI 控制服务")
+        self.control_check.setChecked(bool(cfg.get("control_enabled", True)))
+
         form = QFormLayout()
         form.addRow("关注品种", self.metal_combo)
         form.addRow("默认单位", self.unit_combo)
@@ -1219,6 +1308,16 @@ class SettingsDialog(QDialog):
             "不弹系统通知、不进提醒中心；勿扰时段内不会出声。"
         ))
 
+        # v0.8 AI 控制服务：本机 MCP 桥接专用，外部机器无法连接
+        control_form = QFormLayout()
+        control_form.addRow("", self.control_check)
+        control_form.addRow("", _hint_label(
+            "开启后 AI（如 WorkBuddy / Cursor 的 MCP 工具）可以操控鲸娘：\n"
+            "让她说话、做动作、摸头、挪位置。服务只监听本机 127.0.0.1\n"
+            "随机端口，且需要随机 token 才能访问，外部机器无法连接。\n"
+            "接入信息文件：GoldPet 数据目录下的 control.json（保存后生效）。"
+        ))
+
         ok = QPushButton("保存")
         cancel = QPushButton("取消")
         ok.clicked.connect(self.accept)
@@ -1240,6 +1339,8 @@ class SettingsDialog(QDialog):
         content_layout.addLayout(care_form)
         content_layout.addWidget(_section_label("勿扰模式"))
         content_layout.addLayout(dnd_form)
+        content_layout.addWidget(_section_label("AI 控制"))
+        content_layout.addLayout(control_form)
         content_layout.addStretch(1)
 
         scroll = QScrollArea()
@@ -1311,6 +1412,8 @@ class SettingsDialog(QDialog):
         self.cfg.set("care_drink_interval_min", int(self.drink_combo.currentData()))
         self.cfg.set("care_posture_enabled", self.posture_check.isChecked())
         self.cfg.set("care_eye_enabled", self.eye_check.isChecked())
+        # v0.8 AI 控制服务
+        self.cfg.set("control_enabled", self.control_check.isChecked())
         autostart.set_enabled(self.autostart_check.isChecked())
         # v0.5.4：按勾选状态增删快捷方式（幂等，重复创建会覆盖）
         if self._link_supported:

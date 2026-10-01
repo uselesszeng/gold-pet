@@ -56,3 +56,8 @@ def log_path() -> Path:
 
 def lock_path() -> Path:
     return app_dir() / ".gold-pet.lock"
+
+
+def control_info_path() -> Path:
+    """AI 控制服务发现文件（v0.8）：port/token/pid，供 MCP 桥接进程读取。"""
+    return app_dir() / "control.json"

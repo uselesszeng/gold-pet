@@ -42,6 +42,9 @@ DEFAULTS: dict = {
     "care_eye_interval_min": 45,
     # 托盘图标是否显示价格数字
     "tray_show_price": True,
+    # AI 控制服务（v0.8）：本地 HTTP 仅绑 127.0.0.1 随机端口 + token 鉴权，
+    # 供 MCP 桥接进程（tools/pet_mcp_server.py）远程操控鲸娘
+    "control_enabled": True,
     "always_on_top": True,  # 窗口置顶
     "opacity": 1.0,  # 不透明度 0.3 ~ 1.0
     "show_bubble": True,  # 是否显示价格气泡
@@ -156,6 +159,7 @@ class Config:
             "alert_extreme_enabled",
             "dnd_enabled",
             "tray_show_price",
+            "control_enabled",
         )
         for key in bool_keys:
             d[key] = bool(d.get(key, DEFAULTS[key]))

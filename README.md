@@ -11,12 +11,12 @@
 
 | 平台 | 方式 | 说明 |
 |---|---|---|
-| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.7.3-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.3/GoldPet-v0.7.3-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
+| **Windows 10/11 64位** | [⬇️ 下载 GoldPet-v0.8.0-win64.exe](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.8.0/GoldPet-v0.8.0-win64.exe) | 免安装绿色版，**双击即用**，无需装 Python |
 | **macOS** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 | **Linux** | [从源码运行](docs/从源码运行.md) | 需先装 Python 3.11+，约 5 分钟 |
 
 > 全部版本见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases)。
-> 校验文件：`GoldPet-v0.7.3-win64.exe.sha256`。
+> 校验文件：`GoldPet-v0.8.0-win64.exe.sha256`。
 
 ### 喜欢哪个形象，就下哪个版本
 
@@ -25,7 +25,7 @@
 
 | 形象 | 对应版本 | 直链 |
 |---|---|---|
-| 🐋 **DeepSeek 鲸鱼娘**（蓝发女仆，画师素材） | v0.6.0（当前） | [下载 v0.7.3（当前，全局图标统一）](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.7.3/GoldPet-v0.7.3-win64.exe) · [v0.6.0](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.6.0/GoldPet-v0.6.0-win64.exe) |
+| 🐋 **DeepSeek 鲸鱼娘**（蓝发女仆，画师素材） | v0.6.0（当前） | [下载 v0.8.0（当前，AI 控制鲸娘）](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.8.0/GoldPet-v0.8.0-win64.exe) · [v0.6.0](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.6.0/GoldPet-v0.6.0-win64.exe) |
 | 🥇 **金色鲸鱼女仆**（PIL 自绘，金主色） | v0.5.5 ~ v0.5.6 | [v0.5.5](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.5/GoldPet-v0.5.5-win64.exe) · [v0.5.6](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.5.6/GoldPet-v0.5.6-win64.exe)（含提醒修复，推荐） |
 | 🐥 早期自绘少女 | v0.4.1 ~ v0.5.4 | 见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases) |
 
@@ -112,10 +112,66 @@
 | 📈 迷你走势图 | 气泡下方实时折线，记录最近 120 个价格点 |
 | 🗣️ 互动台词 | 约 90 条台词池：行情反应、摸头害羞、关怀叮嘱，随机不重样（4 秒后恢复价格） |
 | 🐟 大肥鱼彩蛋 | 右键「叫她大肥鱼🐟」会戳中鲸娘的傲娇：连叫会从嘴硬反驳 → 生气甩尾 → 记仇别扭层层递进；摸摸头就能哄好（每次启动重新原谅） |
+| 🤖 AI 控制鲸娘 | 内置本地控制服务（仅 127.0.0.1 + 随机 token），AI 通过 MCP 工具让鲸娘说话、做动作、摸头、挪位置，对话时桌面真的会动（见下方「AI 控制鲸娘」章节） |
 | 🖱️ 交互 | 单击切换单位 · 双击刷新 · 拖动移动 · 右键菜单 |
 | 📌 托盘常驻 | 关窗=藏到托盘；托盘菜单可刷新/切换/设置/退出 |
 | ⚙️ 设置 | 单位、刷新间隔、动作活跃度、提醒阈值、关怀提醒、不透明度、置顶、开机自启 |
 | 🔌 离线兜底 | 断网显示「离线」+ 上次价格，不崩溃 |
+
+## AI 控制鲸娘（MCP，v0.8 新增）
+
+让 AI（WorkBuddy / Cursor）在对话里直接指挥鲸娘：说话、做动作、摸头、
+叫她大肥鱼、挪位置——桌面真的会动，不再是死的挂件。
+
+**安全模型**：控制服务只监听 `127.0.0.1` 随机端口，外部机器物理上无法连接；
+每次启动随机生成 token；可在设置里一键关闭。默认开启。
+
+### 工作原理
+
+```
+AI 宿主（WorkBuddy / Cursor）
+   │  stdio（MCP 协议）
+   ▼
+tools/pet_mcp_server.py（桥接进程，随仓库分发）
+   │  HTTP 127.0.0.1:<随机端口> + token
+   ▼
+黄金桌宠内置控制服务 → 鲸娘做动作 💙
+```
+
+桌宠启动后会把接入信息写到 `%APPDATA%\GoldPet\control.json`，
+桥接进程每次调用自动读取，桌宠重启也不用改任何配置。
+
+### 配置方法（以 WorkBuddy 为例，Cursor 同理）
+
+在 MCP 配置文件（WorkBuddy：`~/.workbuddy/mcp.json`；Cursor：`~/.cursor/mcp.json`）
+的 `mcpServers` 里加一段：
+
+```json
+{
+  "mcpServers": {
+    "gold-pet": {
+      "command": "C:/path/to/gold-pet/.venv/Scripts/python.exe",
+      "args": ["C:/path/to/gold-pet/tools/pet_mcp_server.py"]
+    }
+  }
+}
+```
+
+> 桥接进程只依赖 `mcp` 包（`pip install "mcp<2"`），不依赖 PySide6。
+> 保存后重启 AI 宿主即可生效。
+
+### AI 能用的六个工具
+
+| 工具 | 作用 |
+|---|---|
+| `pet_status` | 查看鲸娘状态（版本/动画/活跃度/被叫大肥鱼次数） |
+| `pet_say` | 让鲸娘说话：`text` 自由发挥，或 `mood` 从台词组随机挑一句 |
+| `pet_play` | 播放动作动画：idle / up / down / pat / shy |
+| `pet_pat` | 摸摸头（会哄好大肥鱼傲娇） |
+| `pet_tease` | 叫她大肥鱼（会越来越生气，慎用～） |
+| `pet_move` | 挪动位置：dx/dy 相对移动，或 x/y 绝对坐标 |
+
+不想用了？设置面板 →「AI 控制」→ 取消勾选，立即断开。
 
 ## 快速开始（Windows 源码运行）
 
@@ -345,6 +401,14 @@ Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授�
 - 该素材按其**非商业使用许可**分发：本项目为免费、无营利的非商业用途，符合许可范围；
   若你将本程序用于商业场景，请自行移除该素材或取得原作者授权。
 - 本项目代码部分仍为 MIT；素材部分的版权遵循其原作者声明。
+
+## v0.8.0 AI 控制鲸娘
+
+- **🤖 AI 控制鲸娘**：内置本地控制服务（仅 127.0.0.1 + 随机 token，默认开启），
+  配好 MCP 后在 WorkBuddy / Cursor 对话里就能让鲸娘说话、做动作、摸头、
+  叫她大肥鱼、挪位置。
+- 六个 MCP 工具：`pet_status / pet_say / pet_play / pet_pat / pet_tease / pet_move`。
+- 设置面板新增「AI 控制」分组，随时一键开关；详见上方「AI 控制鲸娘」章节。
 
 ## v0.7.3 全局图标统一
 

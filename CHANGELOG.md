@@ -5,6 +5,52 @@
 
 ---
 
+## [0.8.0] - 2026-10-01
+
+**主题：AI 控制鲸娘 —— 让 AI 指挥桌宠做动作、说话**
+
+背景（用户需求）：「我想要 AI 直接控制这个应用，需要预留什么接口？mcp 插件
+还是啥？就是让 AI 控制这个 2d 形象做动作啥的，这样会生动一点？」
+用户拍板三项：控制服务默认开（仅 127.0.0.1 + token）/ 说话自由发挥 + 台词池 /
+WorkBuddy 与 Cursor 都配 MCP。
+
+### 新增
+
+- **内置 AI 控制服务**（`gold_pet/control_server.py`）：QThread 内嵌
+  `ThreadingHTTPServer`，只绑 `127.0.0.1` 随机高位端口；每次启动
+  `secrets.token_urlsafe` 生成随机 token，请求头 `X-GP-Token` 必须匹配。
+  接入信息（port/token/pid/version）写入发现文件
+  `%APPDATA%\GoldPet\control.json`，供桥接进程自动发现；应用退出即停服删文件。
+- **六个控制动作**：`GET /status`（版本/状态/活跃度/大肥鱼计数）、
+  `POST /say`（自由文本或台词组）、`POST /play`（idle/up/down/pat/shy 白名单）、
+  `POST /pat`（摸头哄傲娇）、`POST /tease`（叫大肥鱼）、
+  `POST /move`（dx/dy 相对或 x/y 绝对，自动夹回屏幕内）。
+  动作经 Qt Signal 跨线程转发 UI 线程执行，HTTP 线程绝不触碰 QWidget。
+- **MCP 桥接进程**（`tools/pet_mcp_server.py`）：FastMCP stdio 服务，
+  六个工具 `pet_status / pet_say / pet_play / pet_pat / pet_tease / pet_move`；
+  无状态设计——每次调用重新读发现文件，桌宠重启换端口/换 token 无需改配置；
+  残留发现文件用 pid 探活（Windows 走 OpenProcess，**绝不能用
+  `os.kill(pid,0)`——那在 Windows 上是 TerminateProcess**）过滤。
+- **设置面板「AI 控制」分组**：开关 + 安全说明，保存后立即启停无需重启。
+
+### 安全
+
+- 仅监听回环地址，外部机器物理上无法连接；token 随机且每次启动轮换；
+  请求体 64KB 上限；非白名单状态（loading/offline）拒绝播放；
+  与 AutoClicker-Pro v1.0.52 的 AI 控制服务同一套安全模型。
+
+### 工程
+
+- `config.py` 新增 `control_enabled`（默认开，sanitize 布尔化）。
+- `paths.py` 新增 `control_info_path()`。
+- 新增 20 条单测（`tests/test_control_server.py`）：鉴权 401、六路由分发、
+  参数校验 400、白名单拒绝、发现文件失效兜底、pid 探活、配置开关。
+- 端到端实测：curl 七场景（401/status/say/tease/pat/move/非法 play 400）
+  全部符合预期；PrintWindow 抓拍确认气泡正常显示。
+  （全屏 `grabWindow(0)` 截不到分层窗口的气泡区域是截图方法局限，非功能缺陷。）
+
+---
+
 ## [0.7.3] - 2026-10-01
 
 **主题：全局图标统一 —— 弹窗里的「黄金小鸟」退场**

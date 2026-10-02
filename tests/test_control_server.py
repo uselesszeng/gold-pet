@@ -105,6 +105,18 @@ def test_say_blank_text_400(pet_server):
     assert resp.status_code == 400
 
 
+def test_say_text_length_capped(pet_server):
+    """P2-01：自由发言限长（500 字符），超长文本截断，不撑爆气泡。"""
+    base, actions = pet_server
+    resp = httpx.post(
+        f"{base}/say", json={"text": "啊" * 1000}, headers={"X-GP-Token": TOKEN}, timeout=2
+    )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    assert len(actions) == 1
+    assert len(actions[0]["text"]) == 500
+
+
 # ------------------------------------------------------------------ /play
 def test_play_dispatch(pet_server):
     base, actions = pet_server

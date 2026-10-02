@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import html
 import time
 
 from .price import Quote
@@ -82,8 +83,14 @@ def render_price_html(
 
 
 def render_line_html(text: str) -> str:
-    """渲染一句话气泡（台词 / 引导）。"""
-    return f'<div style="font-size:12px;color:#ffd978">{text}</div>'
+    """渲染一句话气泡（台词 / 引导）。
+
+    P2-01：text 统一做 HTML 转义后再插值。QLabel 按富文本渲染，未转义的
+    外部文本（如 AI 控制服务 /say 的自由发言）可注入 <img>/<table> 等标签，
+    甚至加载本地图片。转义收口在渲染边界，台词池等内部文本不含 HTML 标记，
+    显示不受影响；/say 端点不再自行转义，避免双重转义。
+    """
+    return f'<div style="font-size:12px;color:#ffd978">{html.escape(text)}</div>'
 
 
 def render_cache_html(metal_name: str, quote: Quote, updated_at: float | None = None) -> str:

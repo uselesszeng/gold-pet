@@ -607,6 +607,11 @@ class PetWindow(QWidget):
                 worker.snapshot_ready.disconnect(self._on_snapshot)
             except (RuntimeError, TypeError):
                 pass
+            # P2-02：旧 worker 以 window 为 parent，只 disconnect 不销毁的话
+            # QThread 对象随每次刷新永久累积（60s 档约 1440 个/天）。能走到这里
+            # 说明 isRunning() 已为 False（线程已结束），deleteLater 交给事件
+            # 循环在主线程回收，不存在销毁运行中线程的竞态。
+            worker.deleteLater()
         if self._retry_timer.isActive():
             self._retry_timer.stop()
         self._set_state("loading")
@@ -738,7 +743,8 @@ class PetWindow(QWidget):
         range_key = self.cfg.get("spark_range", "1h")
         values = filter_series(series, range_key)
         if not values:  # 范围内无点时退回原始序列末尾，避免图空着
-            values = [p.get("p", 0.0) for p in series][-60:]
+            # P2 残留修复：p 可能为数值字符串（_valid_point 允许），转 float 防 Sparkline.min() TypeError
+            values = [_safe_float(p.get("p", 0.0), 0.0) for p in series][-60:]
         self.spark.set_series(values, color)
 
     # ------------------------------------------------------------------ 台词
@@ -758,7 +764,7 @@ class PetWindow(QWidget):
         同一时刻到期多条时只说优先级最高的一条，其余顺延 90 秒。
         """
         dnd = bool(self.cfg.get("dnd_enabled", False)) and in_quiet_hours(
-            self.cfg.get("dnd_start", "23:00"), self.cfg.get("dnd_end", "08:00")
+            None, self.cfg.get("dnd_start", "23:00"), self.cfg.get("dnd_end", "08:00")
         )
         kind = self.care.due(time.time(), dnd_active=dnd)
         if kind is None:

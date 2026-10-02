@@ -108,6 +108,31 @@ def test_notifier_quiet_hours_respects_switch():
     assert Notifier(cfg).in_quiet_hours(12 * 60) is True
 
 
+def test_in_quiet_hours_call_contract_cross_midnight():
+    """P1-01 回归：in_quiet_hours 的实参契约是 (now_minutes, start, end)。
+
+    v0.8.0 中 ui._care_tick 曾按 (start, end) 顺序位置传参，实参被解析为
+    now_minutes=start、start=end、end=""，parse_hhmm("") 返回 None 使勿扰
+    判断恒为 False，关怀提醒在勿扰时段照常出声。此测试锁定正确契约
+    （含跨午夜区间），防止同类调用错误回潮。
+    """
+    # 模块级函数：先 now_minutes，后 start/end（跨午夜 23:00-08:00）
+    assert in_quiet_hours(23 * 60 + 30, "23:00", "08:00") is True
+    assert in_quiet_hours(7 * 60, "23:00", "08:00") is True
+    assert in_quiet_hours(12 * 60, "23:00", "08:00") is False
+    # 旧 bug 形态（把 start/end 传到前两个位置）在该签名下必然失效
+    assert in_quiet_hours("23:00", "08:00") is False
+    # Notifier 方法（行情提醒路径）走同一契约，跨午夜同样正确
+    cfg = Config()
+    cfg.set("dnd_enabled", True)
+    cfg.set("dnd_start", "23:00")
+    cfg.set("dnd_end", "08:00")
+    notifier = Notifier(cfg)
+    assert notifier.in_quiet_hours(23 * 60 + 30) is True
+    assert notifier.in_quiet_hours(7 * 60) is True
+    assert notifier.in_quiet_hours(12 * 60) is False
+
+
 # ------------------------------------------------------------------ 涨跌幅提醒
 
 
@@ -492,6 +517,24 @@ def test_history_ignores_non_dict_items(tmp_path):
     assert len(n.history()) == 1
 
 
+def test_history_skips_items_with_bad_at(tmp_path):
+    """P2-03：at 非数值的历史记录按 0 兜底，加载链路不抛 ValueError。"""
+    path = tmp_path / "h.json"
+    path.write_text(
+        json.dumps(
+            [
+                {"kind": "pct", "side": "up", "title": "t", "body": "坏", "at": "不是数字"},
+                {"kind": "pct", "side": "up", "title": "t", "body": "无 at 字段"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    n = Notifier(Config(), path)
+    items = n.history()
+    assert len(items) == 2  # 不抛异常，坏 at 记录保留
+    assert all(a.at == 0.0 for a in items)
+
+
 def test_history_without_path_is_memory_only():
     n = Notifier(Config(), None)
     n.record([Alert(kind="pct", side="up", title="t", body="a")])
@@ -528,3 +571,18 @@ def test_filter_series_empty_and_bad():
     assert filter_series([], "1h") == []
     # 缺字段按 0 处理，不抛异常
     assert filter_series([{"p": 5.0}], "all") == [5.0]
+
+
+def test_filter_series_skips_non_numeric_points():
+    """P2-03：t/p 非数值的坏点跳过（记日志），渲染链路不抛 ValueError。"""
+    now = time.time()
+    series = [
+        {"t": now - 60, "p": 100.0},  # 正常
+        "not-a-dict",  # 非 dict
+        {"t": "坏", "p": 200.0},  # t 非数值（有时间过滤时无法定位，跳过）
+        {"t": now - 30, "p": "坏"},  # p 非数值，跳过
+        {"t": now - 30, "p": 300.0},  # 正常
+    ]
+    assert filter_series(series, "1h", now) == [100.0, 300.0]
+    # 无时间过滤时不看 t，t 坏但 p 好的点仍保留
+    assert filter_series(series, "all", now) == [100.0, 200.0, 300.0]

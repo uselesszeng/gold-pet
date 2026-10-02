@@ -32,11 +32,25 @@ alert_cooldown_sec 退居为「防抖」：只拦截「跌破阈值后又迅速�
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .price import Quote
+
+logger = logging.getLogger("gold_pet")
+
+
+def _safe_float(value, default: float | None = None) -> float | None:
+    """宽松转 float：失败返回 default（P2-03）。
+
+    default 传 0.0 表示「坏值按 0 兜底」；保持 None 供调用方识别坏值并跳过。
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 # 提醒类型
 KIND_PCT = "pct"
@@ -91,7 +105,8 @@ class Alert:
             side=data.get("side", ""),
             title=data.get("title", ""),
             body=data.get("body", ""),
-            at=float(data.get("at", 0.0)),
+            # P2-03：at 非数值/缺失时按 0 兜底，不让脏历史炸掉加载链路
+            at=_safe_float(data.get("at"), 0.0),
         )
 
     @property
@@ -385,9 +400,16 @@ class Notifier:
             return
         if not isinstance(raw, list):
             return
-        self._history = [Alert.from_dict(item) for item in raw if isinstance(item, dict)][
-            -self.max_history :
-        ]
+        # P2-03：逐项容错——坏记录跳过并记日志，不让一次手改坏文件中断提醒链路
+        history: list[Alert] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            try:
+                history.append(Alert.from_dict(item))
+            except (TypeError, ValueError):
+                logger.warning("alert history: 跳过 1 条无法解析的坏记录", exc_info=True)
+        self._history = history[-self.max_history :]
 
     def _save(self) -> None:
         if self.history_path is None:
@@ -430,8 +452,28 @@ def filter_series(series: list[dict], range_key: str, now: float | None = None) 
     """按时间范围过滤历史序列，返回价格列表。
 
     series 形如 [{"t": 时间戳, "p": 价格}, ...]；无有效点时返回空列表。
+    P2-03：t/p 非数值的坏点跳过并记日志（缺字段仍按 0 处理），不让脏数据
+    在刷新渲染链路抛 ValueError。
     """
     cutoff = spark_cutoff(range_key, now)
-    if cutoff is None:
-        return [float(p.get("p", 0.0)) for p in series]
-    return [float(p.get("p", 0.0)) for p in series if float(p.get("t", 0.0)) >= cutoff]
+    values: list[float] = []
+    skipped = 0
+    for point in series:
+        if not isinstance(point, dict):
+            skipped += 1
+            continue
+        price = _safe_float(point.get("p", 0.0))
+        if price is None:
+            skipped += 1
+            continue
+        if cutoff is not None:
+            ts = _safe_float(point.get("t", 0.0))
+            if ts is None:  # 有时间过滤却给不出时间：坏点
+                skipped += 1
+                continue
+            if ts < cutoff:
+                continue  # 正常的旧数据点，不算坏
+        values.append(price)
+    if skipped:
+        logger.warning("spark: 序列含 %d 条坏数据点，已跳过", skipped)
+    return values

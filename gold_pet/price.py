@@ -12,11 +12,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger("gold_pet")
 
 SINA_URL = "https://hq.sinajs.cn/list=gds_AUTD,hf_XAU,gds_AGTD,hf_XAG,hf_XPT,fx_susdcny"
 HEADERS = {
@@ -280,6 +283,22 @@ class PriceService:
             return None
 
 
+def _valid_point(point: object) -> bool:
+    """P2-03：序列点合法性——必须是 dict 且 t/p 均可转 float。
+
+    手改坏/磁盘损坏产生的坏点（非 dict、t/p 为字符串或 None）一律视为无效，
+    避免渲染与写入链路 float()/dict.get 抛异常。
+    """
+    if not isinstance(point, dict):
+        return False
+    try:
+        float(point.get("t", 0.0))
+        float(point.get("p", 0.0))
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 class HistoryStore:
     """价格历史（用于迷你走势图），每个品种+单位最多保留 max_points 条。
 
@@ -295,9 +314,27 @@ class HistoryStore:
     def load(self) -> dict[str, list[dict]]:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
         except (OSError, ValueError):
             return {}
+        if not isinstance(data, dict):
+            return {}
+        # P2-03：逐项容错——坏点直接剔除（与 settings 的 sanitize 同等对待），
+        # 不让脏数据进内存、炸掉刷新渲染与 append 写入链路。
+        cleaned: dict[str, list[dict]] = {}
+        for name, series in data.items():
+            if not isinstance(series, list):
+                continue
+            points = [pt for pt in series if _valid_point(pt)]
+            if len(points) != len(series):
+                logger.warning(
+                    "history: %s 序列 %s 剔除 %d 条坏数据点",
+                    self.path.name,
+                    name,
+                    len(series) - len(points),
+                )
+            if points:
+                cleaned[name] = points
+        return cleaned
 
     def append(self, metal: str, unit: str, price: float) -> list[dict]:
         data = self.load()

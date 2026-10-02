@@ -44,6 +44,10 @@ PLAYABLE_STATES = ("idle", "up", "down", "pat", "shy")
 # 请求体大小上限：控制指令都是小 JSON，64KB 绰绰有余（防误用/恶意大包）
 _MAX_BODY_BYTES = 64 * 1024
 
+# /say 自由发言的文本上限（P2-01）：超长文本会把气泡撑爆/变形，超出部分截断。
+# HTML 转义统一在渲染边界 bubble.render_line_html 做，这里只管限长。
+_MAX_SAY_CHARS = 500
+
 
 def _make_handler():
     """返回 Handler 类。写成工厂是为了避免模块级单例状态（测试可反复构建）。"""
@@ -118,7 +122,10 @@ def _make_handler():
                 text = data.get("text")
                 mood = data.get("mood")
                 if isinstance(text, str) and text.strip():
-                    self.server.dispatch({"action": "say", "text": text.strip()})
+                    # P2-01：限长，防超长文本撑爆气泡（HTML 转义在渲染层统一做）
+                    self.server.dispatch(
+                        {"action": "say", "text": text.strip()[:_MAX_SAY_CHARS]}
+                    )
                     self._send_json(200, {"ok": True, "mode": "text"})
                     return
                 if isinstance(mood, str) and mood.strip():

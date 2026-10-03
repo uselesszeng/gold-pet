@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,11 +47,16 @@ def _safe_float(value, default: float | None = None) -> float | None:
     """宽松转 float：失败返回 default（P2-03）。
 
     default 传 0.0 表示「坏值按 0 兜底」；保持 None 供调用方识别坏值并跳过。
+    M-05：NaN / Infinity 能通过 float()，但会污染下游（走势图拿到 NaN 点、
+    提醒历史 json.dumps 写出非法的 `NaN` 字面量），与转换失败同等对待。
     """
     try:
-        return float(value)
+        result = float(value)
     except (TypeError, ValueError):
         return default
+    if not math.isfinite(result):
+        return default
+    return result
 
 # 提醒类型
 KIND_PCT = "pct"

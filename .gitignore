@@ -31,3 +31,6 @@ version_info.txt
 release/
 _backup_v055/
 pet_shot.*
+
+# WorkBuddy 本地记忆目录（不入库）
+.workbuddy/

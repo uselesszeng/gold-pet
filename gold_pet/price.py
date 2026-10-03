@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import time
 import urllib.request
@@ -88,7 +89,29 @@ class Quote:
 
     @classmethod
     def from_dict(cls, data: dict) -> Quote:
-        return cls(**{k: v for k, v in data.items() if k in cls.__annotations__})
+        """M-07：缓存文件可能被手改坏——字段缺失/类型错/NaN 一律收敛，
+        不让脏字段（如 price 为字符串）在后续 change/format_price 链路炸出 TypeError。
+        数值字段出现非有限值时抛 ValueError，由 Snapshot.from_dict 剔除该条报价。
+        """
+        known = {k: v for k, v in data.items() if k in cls.__annotations__}
+        price = _num(known.get("price"), 0.0)
+        prev_close = _num(known.get("prev_close"), 0.0)
+        high = _num(known.get("high"), 0.0)
+        low = _num(known.get("low"), 0.0)
+        if not all(math.isfinite(v) for v in (price, prev_close, high, low)):
+            raise ValueError("quote 含非有限数值（NaN/Infinity）")
+        return cls(
+            code=str(known.get("code", "")),
+            name=str(known.get("name", "")),
+            price=price,
+            prev_close=prev_close,
+            high=high,
+            low=low,
+            time_text=str(known.get("time_text", "")),
+            unit=str(known.get("unit", "")),
+            currency=str(known.get("currency", "")),
+            converted=bool(known.get("converted", False)),
+        )
 
 
 @dataclass
@@ -147,12 +170,27 @@ class Snapshot:
 
     @classmethod
     def from_dict(cls, data: dict) -> Snapshot:
+        """M-07：对脏缓存文件结构收敛——quotes 必须是 dict、元素必须是 dict，
+        标量字段宽松转型；坏报价剔除而不是让 AttributeError/TypeError 炸穿
+        load_cache（它只捕 OSError/ValueError/KeyError/TypeError）与 CLI。
+        """
+        if not isinstance(data, dict):
+            data = {}
+        quotes_raw = data.get("quotes")
+        quotes: dict[str, Quote] = {}
+        if isinstance(quotes_raw, dict):
+            for k, v in quotes_raw.items():
+                if isinstance(v, dict):
+                    try:
+                        quotes[str(k)] = Quote.from_dict(v)
+                    except (TypeError, ValueError):
+                        continue  # 单条坏报价不拖垮整个快照
         return cls(
-            quotes={k: Quote.from_dict(v) for k, v in (data.get("quotes") or {}).items()},
-            fx=data.get("fx", 0.0),
-            updated_at=data.get("updated_at", time.time()),
-            ok=data.get("ok", False),
-            error=data.get("error", ""),
+            quotes=quotes,
+            fx=_num(data.get("fx"), 0.0),
+            updated_at=_num(data.get("updated_at"), 0.0, low=0.0, high=32503680000.0),
+            ok=bool(data.get("ok", False)),
+            error=str(data.get("error", "")),
         )
 
 
@@ -161,6 +199,22 @@ def _f(values: list, idx: int, default: float = 0.0) -> float:
         return float(values[idx])
     except (IndexError, ValueError):
         return default
+
+
+def _num(value: object, default: float = 0.0, low: float | None = None,
+         high: float | None = None) -> float:
+    """M-07：任意脏值 -> 有限 float；转换失败或超出 [low, high] 回落 default。"""
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(result):
+        return default
+    if low is not None and result < low:
+        return default
+    if high is not None and result > high:
+        return default
+    return result
 
 
 def _s(values: list, idx: int, default: str = "") -> str:
@@ -284,19 +338,22 @@ class PriceService:
 
 
 def _valid_point(point: object) -> bool:
-    """P2-03：序列点合法性——必须是 dict 且 t/p 均可转 float。
+    """P2-03：序列点合法性——必须是 dict 且 t/p 均可转 float 且为有限值。
 
     手改坏/磁盘损坏产生的坏点（非 dict、t/p 为字符串或 None）一律视为无效，
     避免渲染与写入链路 float()/dict.get 抛异常。
+    M-04：NaN / Infinity 同样能通过 float()，但回写文件时 json.dumps 会产出
+    `NaN`/`Infinity` 字面量——这不是合法 JSON（RFC 8259），会污染状态文件，
+    因此非有限值也视为坏点剔除。
     """
     if not isinstance(point, dict):
         return False
     try:
-        float(point.get("t", 0.0))
-        float(point.get("p", 0.0))
+        t = float(point.get("t", 0.0))
+        p = float(point.get("p", 0.0))
     except (TypeError, ValueError):
         return False
-    return True
+    return math.isfinite(t) and math.isfinite(p)
 
 
 class HistoryStore:
@@ -339,6 +396,10 @@ class HistoryStore:
     def append(self, metal: str, unit: str, price: float) -> list[dict]:
         data = self.load()
         series = data.get(key(metal, unit), [])
+        # M-04：非有限价格（NaN/Infinity）不落盘——json.dumps 会把它们写成
+        # 非法 JSON 字面量，污染 history.json（下游 json.loads 虽宽容，其他解析器不认）。
+        if not math.isfinite(price):
+            return series
         now = time.time()
         # 同一分钟内不重复记录
         if series and now - series[-1].get("t", 0) < 60:

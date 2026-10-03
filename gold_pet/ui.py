@@ -59,7 +59,14 @@ from .config import (
     Config,
 )
 from .control_server import ControlServer
-from .notifier import RULE_CONFIG_KEYS, Alert, Notifier, filter_series, in_quiet_hours
+from .notifier import (
+    RULE_CONFIG_KEYS,
+    Alert,
+    Notifier,
+    _safe_float,
+    filter_series,
+    in_quiet_hours,
+)
 from .paths import alert_history_path, asset_dir
 from .price import METALS, Snapshot, is_market_open
 

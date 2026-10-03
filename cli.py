@@ -122,7 +122,15 @@ def _discover() -> tuple[int, str]:
     if not isinstance(info, dict):
         raise CliError("接入信息文件格式异常，请重启黄金桌宠后重试。")
     port, token, pid = info.get("port"), info.get("token"), info.get("pid")
-    if not port or not token:
+    # M-08：发现文件可能被手改坏——port 必须是 1~65535 的 int、token 必须是非空 str，
+    # 否则 int("abc") 这类转换会把 ValueError 直接抛到 main 之外炸穿退出码约定。
+    if (
+        not isinstance(port, int)
+        or isinstance(port, bool)
+        or not (0 < port < 65536)
+        or not isinstance(token, str)
+        or not token
+    ):
         raise CliError("接入信息不完整，请重启黄金桌宠后重试。")
     # 残留文件（进程已退出）不能拿去连——端口/token 都已失效
     if isinstance(pid, int) and not _pid_alive(pid):
@@ -130,7 +138,7 @@ def _discover() -> tuple[int, str]:
             "桌宠没有在运行（control.json 是上次退出残留的）。"
             "请先启动黄金桌宠：python run.py（或双击 run.bat）。"
         )
-    return int(port), str(token)
+    return port, token
 
 
 def _request(method: str, path: str, payload: dict | None = None) -> dict:
@@ -173,6 +181,18 @@ def _request(method: str, path: str, payload: dict | None = None) -> dict:
 
 
 # ==================================================================== 本地数据
+def _fmt_time(ts, fmt: str) -> str:
+    """安全格式化时间戳（M-06）：数据文件可能被手改成任意值。
+
+    t=1e30 抛 OverflowError、NaN 抛 ValueError、字符串数字也能被 float() 收下；
+    转换/格式化失败一律显示 "?"，绝不让展示层崩穿退出码约定。
+    """
+    try:
+        return time.strftime(fmt, time.localtime(float(ts)))
+    except (TypeError, ValueError, OverflowError, OSError):
+        return "?"
+
+
 def _load_json(path, missing_ok: bool = False):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -496,13 +516,15 @@ def _print_human(command: str, data: dict) -> None:
             head = f"{key}（共 {len(pts)} 点，坏点剔除 {data['dropped_bad_points']}）"
             print(head)
             for pt in pts[-5:]:
-                print(f"  {time.strftime('%m-%d %H:%M:%S', time.localtime(pt['t']))}  {pt['p']}")
+                print(f"  {_fmt_time(pt['t'], '%m-%d %H:%M:%S')}  {pt['p']}")
             if len(pts) > 5:
                 print(f"  …（仅展示最近 5 点，共 {len(pts)} 点）")
     elif command == "alerts":
         print(f"提醒历史 {data['count']} 条：")
         for a in data["alerts"]:
-            at = time.strftime("%m-%d %H:%M:%S", time.localtime(a.get("at", 0)))
+            if not isinstance(a, dict):  # M-06：脏文件里混入非对象项，展示层跳过
+                continue
+            at = _fmt_time(a.get("at", 0), "%m-%d %H:%M:%S")
             print(f"  [{at}] {a.get('title', '')} {a.get('body', '')}")
 
 

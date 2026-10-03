@@ -24,6 +24,7 @@ from __future__ import annotations
 import ctypes
 import json
 import logging
+import math
 import os
 import secrets
 from collections.abc import Callable
@@ -44,9 +45,26 @@ PLAYABLE_STATES = ("idle", "up", "down", "pat", "shy")
 # 请求体大小上限：控制指令都是小 JSON，64KB 绰绰有余（防误用/恶意大包）
 _MAX_BODY_BYTES = 64 * 1024
 
+# 短路响应（401/404/413）前排空请求体的上限（M-09）
+_MAX_DRAIN_BYTES = 8 * 1024 * 1024
+
 # /say 自由发言的文本上限（P2-01）：超长文本会把气泡撑爆/变形，超出部分截断。
 # HTML 转义统一在渲染边界 bubble.render_line_html 做，这里只管限长。
 _MAX_SAY_CHARS = 500
+
+
+def _to_coord(value: Any) -> int | None:
+    """把 /move 的坐标值收敛成 int；非法（含 NaN/Infinity，M-01）返回 None。
+
+    int(float("nan")) 抛 ValueError、int(float("inf")) 抛 OverflowError，
+    在 handler 线程里未捕获会导致连接被直接断开、客户端收不到任何 JSON 响应，
+    因此必须在转换前拒绝非有限值。bool 是 int 子类，同样拒绝（true 不是坐标）。
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return int(value)
 
 
 def _make_handler():
@@ -70,9 +88,29 @@ def _make_handler():
             self.end_headers()
             self.wfile.write(body)
 
+        def _drain_body(self) -> None:
+            """消费掉未读的请求体（M-09）。
+
+            401/404/413 短路响应在读取请求体之前就回包关连接；socket 里还压着
+            未读数据时关闭，Windows 会直接发 RST，客户端可能连响应都收不到
+            （WinError 10053，间歇性）。限量排空后正常 FIN 关闭，客户端才能
+            稳定拿到 JSON 响应。
+            """
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return
+            if length <= 0:
+                return
+            try:
+                self.rfile.read(min(length, _MAX_DRAIN_BYTES))
+            except OSError:
+                pass
+
         def _check_auth(self) -> bool:
             if self.headers.get("X-GP-Token", "") == self.server.token:
                 return True
+            self._drain_body()
             self._send_json(401, {"ok": False, "error": "token 无效或缺失（X-GP-Token）"})
             return False
 
@@ -85,12 +123,15 @@ def _make_handler():
             if length <= 0:
                 return {}
             if length > _MAX_BODY_BYTES:
+                self._drain_body()
                 self._send_json(413, {"ok": False, "error": "请求体过大"})
                 return None
             raw = self.rfile.read(length)
             try:
                 data = json.loads(raw.decode("utf-8"))
-            except (ValueError, UnicodeDecodeError):
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                # RecursionError：M-02，超深嵌套 JSON（如 2 万层 [[[[…]]]]）会炸穿
+                # json 解析器，不接住的话 handler 线程直接断连，客户端收不到 JSON。
                 self._send_json(400, {"ok": False, "error": "请求体不是合法 JSON"})
                 return None
             if not isinstance(data, dict):
@@ -112,6 +153,7 @@ def _make_handler():
                 return
             path = self.path.split("?", 1)[0]
             if path not in ("/say", "/play", "/pat", "/tease", "/move"):
+                self._drain_body()
                 self._send_json(404, {"ok": False, "error": "未知路径"})
                 return
             data = self._read_json()
@@ -148,18 +190,18 @@ def _make_handler():
                 return
 
             if path == "/move":
-                dx, dy = data.get("dx"), data.get("dy")
-                x, y = data.get("x"), data.get("y")
-                has_rel = isinstance(dx, (int, float)) and isinstance(dy, (int, float))
-                has_abs = isinstance(x, (int, float)) and isinstance(y, (int, float))
+                dx, dy = _to_coord(data.get("dx")), _to_coord(data.get("dy"))
+                x, y = _to_coord(data.get("x")), _to_coord(data.get("y"))
+                has_rel = dx is not None and dy is not None
+                has_abs = x is not None and y is not None
                 if not (has_rel or has_abs):
                     self._send_json(400, {"ok": False, "error": "需要 dx/dy（相对挪动）或 x/y（绝对坐标）"})
                     return
                 action: dict[str, Any] = {"action": "move"}
                 if has_rel:
-                    action["dx"], action["dy"] = int(dx), int(dy)  # type: ignore[arg-type]
+                    action["dx"], action["dy"] = dx, dy
                 else:
-                    action["x"], action["y"] = int(x), int(y)  # type: ignore[arg-type]
+                    action["x"], action["y"] = x, y
                 self.server.dispatch(action)
                 self._send_json(200, {"ok": True})
                 return

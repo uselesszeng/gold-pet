@@ -7,6 +7,7 @@ Windows: %APPDATA%\\GoldPet\\settings.json
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -73,13 +74,21 @@ UNIT_NAMES = {"cny_g": "元/克", "usd_oz": "美元/盎司"}
 
 
 def _as_float(value: Any, default: float) -> float:
-    """把任意值转成 float，失败回落默认值（配置文件可能被手改坏）。"""
+    """把任意值转成 float，失败回落默认值（配置文件可能被手改坏）。
+
+    M-03：JSON 文件里手写的 NaN / Infinity 会被 json.loads 解析成 float("nan"/"inf")，
+    后续 int(nan) 抛 ValueError、int(inf) 抛 OverflowError 直接炸穿 sanitize()/load()，
+    导致程序起不来；clamp 对 NaN 也不生效（结果还是 NaN）。非有限值一律视为坏值回落默认。
+    """
     if value is None:
         return default
     try:
-        return float(value)
+        result = float(value)
     except (TypeError, ValueError):
         return default
+    if not math.isfinite(result):
+        return default
+    return result
 
 
 def _as_int(value: Any, default: int) -> int:
@@ -127,9 +136,11 @@ class Config:
     def sanitize(self) -> None:
         """把配置收敛到合法范围：手改坏了也不让程序崩。"""
         d = self._data
-        if d.get("metal") not in METAL_NAMES:
+        # M-10：值可能是 list/dict 等不可哈希类型，dict 成员判断会抛
+        # TypeError: unhashable type，必须先验 isinstance(str)。
+        if not isinstance(d.get("metal"), str) or d["metal"] not in METAL_NAMES:
             d["metal"] = DEFAULTS["metal"]
-        if d.get("unit") not in UNIT_NAMES:
+        if not isinstance(d.get("unit"), str) or d["unit"] not in UNIT_NAMES:
             d["unit"] = DEFAULTS["unit"]
 
         interval = _as_int(d.get("interval_sec"), DEFAULTS["interval_sec"])
@@ -164,12 +175,12 @@ class Config:
         for key in bool_keys:
             d[key] = bool(d.get(key, DEFAULTS[key]))
 
-        # 走势图时间范围：非法值回落默认
-        if d.get("spark_range") not in SPARK_RANGE_NAMES:
+        # 走势图时间范围：非法值回落默认（M-10：先验 str 再做成员判断）
+        if not isinstance(d.get("spark_range"), str) or d["spark_range"] not in SPARK_RANGE_NAMES:
             d["spark_range"] = DEFAULTS["spark_range"]
 
-        # 动作活跃度：非法值回落标准
-        if d.get("activity_level") not in ACTIVITY_LEVELS:
+        # 动作活跃度：非法值回落标准（M-10：同上）
+        if not isinstance(d.get("activity_level"), str) or d["activity_level"] not in ACTIVITY_LEVELS:
             d["activity_level"] = DEFAULTS["activity_level"]
 
         # 关怀提醒：开关布尔化，间隔收敛到可选档位

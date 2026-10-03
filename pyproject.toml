@@ -34,3 +34,7 @@ exclude_lines = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[project]
+# 许可以仓库根目录 LICENSE 文件为准（MIT + 附加条款：原创署名 / 商用需授权 / 禁止非法）
+license = "SEE LICENSE IN LICENSE"

@@ -1,13 +1,12 @@
-MIT License
+MIT License with Additional Terms
 
-Copyright (c) 2026 176code
+Copyright (c) 2026 吴八哥 (TJ-coding / cnb.cool/TJ-coding)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -19,3 +18,24 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+------------------------------------------------------------
+附加条款（Additional Terms）—— 与上述 MIT 许可共同生效，如有冲突以本节为准
+
+1. 署名与原创声明
+   本软件为版权所有者（吴八哥 (TJ-coding / cnb.cool/TJ-coding)）的原创作品。任何复制、修改、
+   分发（含衍生作品）均须完整保留本 LICENSE 文件及上述版权声明，不得删改。
+
+2. 商业用途须经授权（Commercial Use Requires Consent）
+   任何商业用途 —— 包括但不限于：直接出售、付费订阅、嵌入商业产品销售、
+   或借本软件牟利的付费服务 —— 必须事先获得版权所有者的书面同意与授权；
+   未获授权的商业使用构成侵权，版权所有者保留追究权利。
+
+3. 禁止非法用途（Lawful Use Only）
+   不得将本软件或其衍生作品用于任何违反适用法律法规的用途；
+   因违规使用产生的一切后果与责任由使用者自行承担。
+
+4. 授权联系
+   商业授权与许可疑问请联系：cnb.cool/TJ-coding（站内私信或仓库 Issue）。
+
+（附加条款的中文表述为正式约定；英文标题仅为对照。）

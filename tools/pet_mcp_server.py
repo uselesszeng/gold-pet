@@ -45,7 +45,11 @@ mcp = FastMCP("gold-pet")
 
 # ------------------------------------------------------------------ 底层调用
 def _discover() -> tuple[int, str]:
-    """读桌宠的发现文件 -> (port, token)；桌宠没在运行时抛友好异常。"""
+    """读桌宠的发现文件 -> (port, token)；桌宠没在运行时抛友好异常。
+
+    R2-M-06：port/token 校验与 cli._discover（M-08）/read_control_info 对齐，
+    手改坏的文件（port 为 list/"abc"/越界）走友好 RuntimeError 而非裸 TypeError。
+    """
     try:
         info = json.loads(_INFO_PATH.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -53,12 +57,20 @@ def _discover() -> tuple[int, str]:
             "桌宠没有在运行（未找到接入信息 control.json）。"
             "请先启动黄金桌宠，再调用本工具。"
         ) from None
-    except ValueError:
+    except (ValueError, RecursionError):
         raise RuntimeError("接入信息文件损坏，请重启黄金桌宠。") from None
+    if not isinstance(info, dict):
+        raise RuntimeError("接入信息文件格式异常，请重启黄金桌宠。")
     port, token = info.get("port"), info.get("token")
-    if not port or not token:
+    if (
+        not isinstance(port, int)
+        or isinstance(port, bool)
+        or not (0 < port < 65536)
+        or not isinstance(token, str)
+        or not token
+    ):
         raise RuntimeError("接入信息不完整，请重启黄金桌宠。")
-    return int(port), str(token)
+    return port, token
 
 
 def _call(method: str, path: str, payload: dict | None = None, success: str = "完成") -> str:

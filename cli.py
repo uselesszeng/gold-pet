@@ -117,7 +117,8 @@ def _discover() -> tuple[int, str]:
             "请先启动黄金桌宠：python run.py（或双击 run.bat），"
             "启动后本命令即可使用。"
         ) from None
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
+        # RecursionError：R2-M-03，超深嵌套的发现文件按损坏处理
         raise CliError("接入信息文件损坏，请重启黄金桌宠后重试。") from None
     if not isinstance(info, dict):
         raise CliError("接入信息文件格式异常，请重启黄金桌宠后重试。")
@@ -200,7 +201,8 @@ def _load_json(path, missing_ok: bool = False):
         if missing_ok:
             return None
         raise CliError(f"数据文件不存在：{path}（桌宠可能尚未产生该数据）") from None
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
+        # RecursionError：R2-M-03，超深嵌套的数据文件按损坏处理，不裸 traceback
         raise CliError(f"数据文件损坏或不可读：{path}") from None
 
 
@@ -566,6 +568,13 @@ def main(argv: list[str] | None = None) -> int:
             False,
             args.command,
             {"code": exc.code, "message": str(exc), "exit_code": exc.exit_code},
+        )
+    except Exception as exc:  # R-monkey 审查兜底：非 CliError 异常也走退出码约定（4）
+        return emit(
+            False,
+            args.command,
+            {"code": "runtime", "message": f"内部错误：{type(exc).__name__}: {exc}",
+             "exit_code": EXIT_RUNTIME},
         )
     return emit(True, args.command, data)
 

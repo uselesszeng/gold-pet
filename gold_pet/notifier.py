@@ -34,11 +34,12 @@ from __future__ import annotations
 import json
 import logging
 import math
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .price import Quote
+from .price import Quote, _atomic_write_text
 
 logger = logging.getLogger("gold_pet")
 
@@ -49,10 +50,12 @@ def _safe_float(value, default: float | None = None) -> float | None:
     default 传 0.0 表示「坏值按 0 兜底」；保持 None 供调用方识别坏值并跳过。
     M-05：NaN / Infinity 能通过 float()，但会污染下游（走势图拿到 NaN 点、
     提醒历史 json.dumps 写出非法的 `NaN` 字面量），与转换失败同等对待。
+    R2-M-01：float(10**400) 抛 OverflowError（JSON 任意精度整数字面量），
+    同样必须接住，否则脏 history.json 会炸穿 filter_series/渲染链路。
     """
     try:
         result = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     if not math.isfinite(result):
         return default
@@ -194,6 +197,11 @@ class Notifier:
         self._day: str = ""
         self._history: list[Alert] = []
         self._loaded = False
+        # R-monkey 审查：_history 是「读-改-写」可变状态，R2-M-05 只为落盘加了
+        # 原子写但内存侧仍无锁——多线程 record/clear_history 交错时 extend 与
+        # 截断可互相覆盖（丢更新），join 后「磁盘==内存」的 oracle 只是概率成立。
+        # 生产路径（UI 线程单写）成本可忽略，加锁与 HistoryStore 的 R2-M-05 同治。
+        self._history_lock = threading.Lock()
 
     def reset_state(self) -> None:
         """清空去重状态，让下一次判定从零开始。
@@ -374,25 +382,32 @@ class Notifier:
 
     # ------------------------------------------------------------ 历史
     def record(self, alerts: list[Alert]) -> None:
-        """把提醒追加到历史（内存 + 落盘）。"""
+        """把提醒追加到历史（内存 + 落盘）。
+
+        R-monkey 审查：读-改-写（extend/截断/_save）全程持锁，多线程 record
+        不再互相覆盖；与 HistoryStore.append（R2-M-05）同治。
+        """
         if not alerts:
             return
-        self._ensure_loaded()
-        self._history.extend(alerts)
-        if len(self._history) > self.max_history:
-            self._history = self._history[-self.max_history :]
-        self._save()
+        with self._history_lock:
+            self._ensure_loaded()
+            self._history.extend(alerts)
+            if len(self._history) > self.max_history:
+                self._history = self._history[-self.max_history :]
+            self._save()
 
     def history(self, kind: str | None = None) -> list[Alert]:
         """取提醒历史（按时间倒序）。kind 为 None 时返回全部。"""
-        self._ensure_loaded()
-        items = [a for a in self._history if kind is None or a.kind == kind]
+        with self._history_lock:
+            self._ensure_loaded()
+            items = [a for a in self._history if kind is None or a.kind == kind]
         return sorted(items, key=lambda a: a.at, reverse=True)
 
     def clear_history(self) -> None:
-        self._history = []
-        self._loaded = True
-        self._save()
+        with self._history_lock:
+            self._history = []
+            self._loaded = True
+            self._save()
 
     def _ensure_loaded(self) -> None:
         if self._loaded:
@@ -402,7 +417,8 @@ class Notifier:
             return
         try:
             raw = json.loads(self.history_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
+            # RecursionError：R2-M-03，超深嵌套的 alert_history.json 不让炸穿加载链路
             return
         if not isinstance(raw, list):
             return
@@ -422,9 +438,10 @@ class Notifier:
             return
         try:
             self.history_path.parent.mkdir(parents=True, exist_ok=True)
-            self.history_path.write_text(
+            # R2-M-05：原子写，CLI 并发读 alert_history.json 不会看到半截 JSON
+            _atomic_write_text(
+                self.history_path,
                 json.dumps([a.to_dict() for a in self._history], ensure_ascii=False, indent=1),
-                encoding="utf-8",
             )
         except OSError:
             pass

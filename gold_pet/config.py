@@ -79,12 +79,14 @@ def _as_float(value: Any, default: float) -> float:
     M-03：JSON 文件里手写的 NaN / Infinity 会被 json.loads 解析成 float("nan"/"inf")，
     后续 int(nan) 抛 ValueError、int(inf) 抛 OverflowError 直接炸穿 sanitize()/load()，
     导致程序起不来；clamp 对 NaN 也不生效（结果还是 NaN）。非有限值一律视为坏值回落默认。
+    R2-M-01：json.loads 对 400 位以上的整数字面量产出任意精度 int，float(10**400)
+    抛的是 OverflowError（不属于 ValueError），同样必须接住回落默认。
     """
     if value is None:
         return default
     try:
         result = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     if not math.isfinite(result):
         return default
@@ -126,7 +128,9 @@ class Config:
             data = json.loads(Path(path).read_text(encoding="utf-8"))
             if not isinstance(data, dict):
                 data = {}
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
+            # RecursionError：R2-M-03，手改坏的超深嵌套 settings.json（2 万层）
+            # 会让 json.loads 抛 RecursionError，不接住程序直接拒启动
             data = {}
         cfg = cls(data)
         cfg._path = path  # type: ignore[attr-defined]

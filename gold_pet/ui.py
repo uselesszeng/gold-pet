@@ -503,6 +503,11 @@ class PetWindow(QWidget):
         screens_override 仅供测试注入屏幕列表，生产路径传 None 即用真实屏幕。
         """
         screens = QApplication.screens() if screens_override is None else list(screens_override)
+        # R2-M-02：AI 控制服务 /move 允许任意量级的 int（如 10**12），而 QPoint 只吃
+        # int32——先夹取再构造，否则 probe = QPoint(x, y) 抛 OverflowError 崩穿 UI 槽。
+        # 合法坐标（屏幕像素级别）远在界内，此夹取对正常路径无感。
+        x = max(-(2**31), min(2**31 - 1, int(x)))
+        y = max(-(2**31), min(2**31 - 1, int(y)))
         screen = None
         probe = QPoint(x, y)
         for candidate in screens:
@@ -1071,11 +1076,17 @@ class PetWindow(QWidget):
 
     def _control_move(self, action: dict) -> None:
         """按 AI 指令挪动窗口：dx/dy 相对 或 x/y 绝对，夹取回屏幕内。"""
-        if "dx" in action and "dy" in action:
-            x = self.x() + int(action["dx"])
-            y = self.y() + int(action["dy"])
-        else:
-            x, y = int(action["x"]), int(action["y"])
+        # R-monkey 审查：动作 dict 经 HTTP/MCP 边界进来，数值字段可能带
+        # 字符串/对象等脏形态——int() 的 ValueError/TypeError/OverflowError
+        # 若未接住会崩穿 UI 槽（与 R2-M-02 同族残余面），静默忽略本条指令。
+        try:
+            if "dx" in action and "dy" in action:
+                x = self.x() + int(action["dx"])
+                y = self.y() + int(action["dy"])
+            else:
+                x, y = int(action["x"]), int(action["y"])
+        except (TypeError, ValueError, OverflowError, KeyError):
+            return
         point = self._clamp_to_screen(x, y)
         self.move(point)
         self.cfg.set("pos", [point.x(), point.y()])

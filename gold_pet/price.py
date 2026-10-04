@@ -14,7 +14,9 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
+import threading
 import time
 import urllib.request
 from dataclasses import dataclass, field
@@ -74,15 +76,34 @@ class Quote:
 
     @property
     def change(self) -> float:
-        return self.price - self.prev_close if self.prev_close else 0.0
+        """R2-M-04：prev_close 极小/异号巨值时差值可溢出为 ±inf（或 huge int 直接
+        溢出 float），收敛为 0.0——防止 CLI --json / 气泡输出非法 JSON 字面量。"""
+        try:
+            value = float(self.price - self.prev_close if self.prev_close else 0.0)
+        except (TypeError, ValueError, OverflowError):
+            return 0.0
+        return value if math.isfinite(value) else 0.0
 
     @property
     def change_pct(self) -> float:
-        return self.change / self.prev_close * 100 if self.prev_close else 0.0
+        """R2-M-04：除以极小 prev_close 会得 ±inf，同样收敛为 0.0。"""
+        try:
+            denom = float(self.prev_close)
+        except (TypeError, ValueError, OverflowError):
+            return 0.0
+        if not denom:
+            return 0.0
+        value = self.change / denom * 100
+        return value if math.isfinite(value) else 0.0
 
     def format_price(self) -> str:
-        digits = 2 if self.price >= 10 else 3
-        return f"{self.price:.{digits}f}"
+        try:
+            value = float(self.price)
+        except (TypeError, ValueError, OverflowError):
+            value = 0.0
+        # + 0.0 把 -0.0 归一为 0.0（手改缓存可能出现），避免显示 "-0.000"
+        digits = 2 if value >= 10 else 3
+        return f"{value + 0.0:.{digits}f}"
 
     def to_dict(self) -> dict:
         return {k: getattr(self, k) for k in self.__annotations__}
@@ -203,10 +224,14 @@ def _f(values: list, idx: int, default: float = 0.0) -> float:
 
 def _num(value: object, default: float = 0.0, low: float | None = None,
          high: float | None = None) -> float:
-    """M-07：任意脏值 -> 有限 float；转换失败或超出 [low, high] 回落 default。"""
+    """M-07：任意脏值 -> 有限 float；转换失败或超出 [low, high] 回落 default。
+
+    R2-M-01：float(10**400)（JSON 超长整数字面量）抛 OverflowError 而非 ValueError，
+    必须一并接住，否则脏缓存会让 Snapshot.from_dict 炸穿 load_cache。
+    """
     try:
         result = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     if not math.isfinite(result):
         return default
@@ -324,8 +349,9 @@ class PriceService:
 
     def save_cache(self, snap: Snapshot) -> None:
         try:
-            self.cache_path.write_text(
-                json.dumps(snap.to_dict(), ensure_ascii=False), encoding="utf-8"
+            # R2-M-05：原子写，PriceWorker 写盘期间 CLI/主线程读缓存不会看到半截 JSON
+            _atomic_write_text(
+                self.cache_path, json.dumps(snap.to_dict(), ensure_ascii=False)
             )
         except OSError:
             pass
@@ -333,8 +359,39 @@ class PriceService:
     def load_cache(self) -> Snapshot | None:
         try:
             return Snapshot.from_dict(json.loads(self.cache_path.read_text(encoding="utf-8")))
-        except (OSError, ValueError, KeyError, TypeError):
+        except (OSError, ValueError, KeyError, TypeError, RecursionError):
+            # RecursionError：R2-M-03，同 HistoryStore.load
             return None
+
+
+_write_seq = 0
+_write_seq_lock = threading.Lock()
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """原子写文本：先写同目录唯一临时文件再 os.replace（R2-M-05）。
+
+    直接 write_text 的话，并发写/读写交错时读者可能看到截断的半截 JSON；
+    os.replace 在同一分区内是原子操作，读者要么看到旧文件要么看到完整新文件。
+    临时文件名带 pid+线程标识：多个线程/进程同时写同一个目标时不会互相
+    覆盖对方尚未 replace 的临时文件（否则仍可能交错出坏内容）。
+    注意：Windows 上 replace 瞬间读者可能拿到 PermissionError（delete-pending），
+    由调用方既有的 OSError 容错路径消化。
+    """
+    global _write_seq
+    with _write_seq_lock:
+        _write_seq += 1
+        seq = _write_seq
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.{seq}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def _valid_point(point: object) -> bool:
@@ -351,7 +408,8 @@ def _valid_point(point: object) -> bool:
     try:
         t = float(point.get("t", 0.0))
         p = float(point.get("p", 0.0))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError：R2-M-01，t/p 为 400 位整数字面量时 float() 溢出
         return False
     return math.isfinite(t) and math.isfinite(p)
 
@@ -367,11 +425,15 @@ class HistoryStore:
         self.path = Path(path)
         self.max_points = max_points
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # R2-M-05：append 是「读-改-写」整个文件，无锁时多线程并发会互相覆盖
+        # （丢更新）甚至交错写出坏文件；生产虽是 UI 单线程写，锁的成本可忽略
+        self._lock = threading.Lock()
 
     def load(self) -> dict[str, list[dict]]:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
+            # RecursionError：R2-M-03，超深嵌套的 history.json 不让炸穿刷新链路
             return {}
         if not isinstance(data, dict):
             return {}
@@ -394,25 +456,27 @@ class HistoryStore:
         return cleaned
 
     def append(self, metal: str, unit: str, price: float) -> list[dict]:
-        data = self.load()
-        series = data.get(key(metal, unit), [])
-        # M-04：非有限价格（NaN/Infinity）不落盘——json.dumps 会把它们写成
-        # 非法 JSON 字面量，污染 history.json（下游 json.loads 虽宽容，其他解析器不认）。
-        if not math.isfinite(price):
+        # R2-M-05：读-改-写全程持锁，消除并发 append 的丢更新与写坏文件
+        with self._lock:
+            data = self.load()
+            series = data.get(key(metal, unit), [])
+            # M-04：非有限价格（NaN/Infinity）不落盘——json.dumps 会把它们写成
+            # 非法 JSON 字面量，污染 history.json（下游 json.loads 虽宽容，其他解析器不认）。
+            if not math.isfinite(price):
+                return series
+            now = time.time()
+            # 同一分钟内不重复记录
+            if series and now - series[-1].get("t", 0) < 60:
+                series[-1] = {"t": now, "p": price}
+            else:
+                series.append({"t": now, "p": price})
+            series = series[-self.max_points :]
+            data[key(metal, unit)] = series
+            try:
+                _atomic_write_text(self.path, json.dumps(data, ensure_ascii=False))
+            except OSError:
+                pass
             return series
-        now = time.time()
-        # 同一分钟内不重复记录
-        if series and now - series[-1].get("t", 0) < 60:
-            series[-1] = {"t": now, "p": price}
-        else:
-            series.append({"t": now, "p": price})
-        series = series[-self.max_points :]
-        data[key(metal, unit)] = series
-        try:
-            self.path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        except OSError:
-            pass
-        return series
 
     def series(self, metal: str, unit: str) -> list[dict]:
         return self.load().get(key(metal, unit), [])

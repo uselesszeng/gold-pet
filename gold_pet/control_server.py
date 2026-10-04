@@ -352,13 +352,26 @@ def _pid_alive(pid: int) -> bool:
 
 
 def read_control_info() -> dict | None:
-    """读取发现文件（MCP 桥接进程用）。文件不存在或 pid 已死都返回 None。"""
+    """读取发现文件（MCP 桥接进程用）。文件不存在、损坏或 pid 已死都返回 None。
+
+    R2-M-06：port/token 校验与 cli._discover（M-08）对齐——手改坏的文件
+    （port 为 list/字符串/越界）不能把脏值透传给桥接进程去连。
+    """
     path = control_info_path()
     try:
         info = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return None
-    if not isinstance(info, dict) or not info.get("port") or not info.get("token"):
+    if not isinstance(info, dict):
+        return None
+    port, token = info.get("port"), info.get("token")
+    if (
+        not isinstance(port, int)
+        or isinstance(port, bool)
+        or not (0 < port < 65536)
+        or not isinstance(token, str)
+        or not token
+    ):
         return None
     # 进程已退出的残留文件：桥接进程别拿它去连
     pid = info.get("pid")

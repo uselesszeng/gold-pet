@@ -7,11 +7,14 @@ Windows: %APPDATA%\\GoldPet\\settings.json
 from __future__ import annotations
 
 import json
+import logging
 import math
 from pathlib import Path
 from typing import Any
 
 from .paths import app_dir, asset_dir, settings_path  # noqa: F401
+
+logger = logging.getLogger("gold_pet")
 
 DEFAULTS: dict = {
     "metal": "gold",  # gold = 黄金, silver = 白银, platinum = 铂金
@@ -202,11 +205,21 @@ class Config:
                 d[hhmm_key] = DEFAULTS[hhmm_key]
 
     def save(self) -> None:
+        """把配置写回磁盘；失败只记警告不抛（R3-M-03）。
+
+        与 save_cache / Notifier._save / HistoryStore.append 的容错口径一致：
+        磁盘满/只读/文件被占时配置保存属最佳努力，绝不能让一次写盘失败
+        炸穿 UI 槽——quit_app 里的 save 抛 OSError 会让 QApplication.quit()
+        永不执行（托盘退出/关窗退不掉）。
+        """
         path = getattr(self, "_path", None) or settings_path()
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).write_text(
-            json.dumps(self._data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            Path(path).write_text(
+                json.dumps(self._data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError:
+            logger.warning("settings: 配置保存失败（%s），本次改动不落盘", path, exc_info=True)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._data.get(key, default)

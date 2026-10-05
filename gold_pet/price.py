@@ -216,10 +216,18 @@ class Snapshot:
 
 
 def _f(values: list, idx: int, default: float = 0.0) -> float:
+    """R3-M-01：行情源文本字段转 float。
+
+    上游返回 `nan` / `inf` / `1e999` 这类文本时 float() 能成功但产出非有限值，
+    会被 parse_snapshot 当作有效报价，最终 json.dumps 把 NaN/Infinity 字面量
+    写进 last_price.json（RFC 8259 之外的非法 JSON，严格解析器全部不认）。
+    非有限值一律按坏字段回落 default（与 _num / _valid_point / _safe_float 同口径）。
+    """
     try:
-        return float(values[idx])
-    except (IndexError, ValueError):
+        value = float(values[idx])
+    except (IndexError, ValueError, OverflowError):
         return default
+    return value if math.isfinite(value) else default
 
 
 def _num(value: object, default: float = 0.0, low: float | None = None,

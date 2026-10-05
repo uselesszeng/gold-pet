@@ -288,7 +288,15 @@ class ControlServer(QThread):
         self.port = server.server_address[1]
         self.token = token
         self.started_ok = True
-        self._write_info()
+        # R3-M-02：发现文件写入失败（磁盘满/只读 AppData）不能让 run() 在
+        # serve_forever 之前抛出——QThread 死亡后 self._server 仍挂着未开始服务的
+        # 实例，stop() 里的 server.shutdown() 会永久阻塞（serve_forever 从未运行，
+        # BaseServer 的 __is_shut_down 事件永不置位），应用退出/关服务直接挂死。
+        # 发现文件缺失只影响 MCP 桥自动发现，本地服务照常提供，降级但可控。
+        try:
+            self._write_info()
+        except OSError:
+            logger.warning("control: 发现文件写入失败，本次启动不写 control.json", exc_info=True)
         logger.info("control: AI 控制服务已启动 127.0.0.1:%d", self.port)
         server.serve_forever(poll_interval=0.2)
         logger.info("control: AI 控制服务已退出")

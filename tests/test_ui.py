@@ -48,6 +48,11 @@ def app():
 
 def _window(app, tmp_path, cfg=None):
     cfg = cfg or Config()
+    # R3 测试基建：测试窗口一律关闭 AI 控制服务。否则每个窗口都启动一个
+    # ControlServer QThread（还会向真实 %APPDATA%\GoldPet\control.json 写发现
+    # 文件），用例结束窗口被 GC 时 QThread 仍在 running，进程退出触发 Qt qFatal
+    # （0xC0000409：pytest 汇总与退出码一并丢失）。
+    cfg.set("control_enabled", False)
     svc = PriceService(tmp_path / "last.json")
     hist = HistoryStore(tmp_path / "history.json")
     # 提醒历史必须落到 tmp_path：否则会写进真实用户目录（%APPDATA%\GoldPet），

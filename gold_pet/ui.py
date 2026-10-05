@@ -1017,9 +1017,19 @@ class PetWindow(QWidget):
             return
         if self.control is not None and self.control.isRunning():
             return
-        self.control = ControlServer(state_reader=self._control_state)
-        self.control.action_received.connect(self._handle_control)
-        self.control.start()
+        control = ControlServer(state_reader=self._control_state)
+        control.action_received.connect(self._handle_control)
+        # R3：QThread 启动失败（线程资源耗尽等）在 PetWindow 构造路径上会直接
+        # 炸穿 init。控制服务是可选能力，启动失败只降级不崩。
+        try:
+            control.start()
+        except (RuntimeError, OSError):
+            logging.getLogger("gold_pet").warning(
+                "AI 控制服务线程启动失败，本次不提供控制服务", exc_info=True
+            )
+            self.control = None
+            return
+        self.control = control
 
     def _apply_control_setting(self) -> None:
         """设置面板保存后按需启停 AI 控制服务（v0.8）。"""

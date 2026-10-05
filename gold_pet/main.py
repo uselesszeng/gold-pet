@@ -23,15 +23,27 @@ from .ui import PetWindow, build_tray
 
 
 def setup_logging(level: str = "INFO") -> None:
-    r"""日志同时写控制台和文件（%APPDATA%\GoldPet\gold-pet.log）。"""
-    log_dir = app_dir()
-    handler = logging.handlers.RotatingFileHandler(
-        log_dir / "gold-pet.log", maxBytes=256 * 1024, backupCount=2, encoding="utf-8"
-    )
+    r"""日志同时写控制台和文件（%APPDATA%\GoldPet\gold-pet.log）。
+
+    R3-M-04：日志文件不可创建/不可写（磁盘满、目录被文件占位、只读）时降级为
+    仅控制台输出。此前 RotatingFileHandler 的 OSError 会在 main() 最前面抛出，
+    降级环境下应用带着裸 traceback 启动即崩，连 --version 都用不了。
+    """
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    try:
+        log_dir = app_dir()
+        handlers.insert(
+            0,
+            logging.handlers.RotatingFileHandler(
+                log_dir / "gold-pet.log", maxBytes=256 * 1024, backupCount=2, encoding="utf-8"
+            ),
+        )
+    except OSError:
+        print("警告：日志文件不可写，本次仅输出到控制台", file=sys.stderr)
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[handler, logging.StreamHandler(sys.stdout)],
+        handlers=handlers,
     )
 
     def excepthook(exc_type, exc, tb):

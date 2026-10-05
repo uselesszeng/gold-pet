@@ -31,6 +31,9 @@ def _make_window(tmp_path, cfg=None):
     application = QApplication.instance() or QApplication([])
     application.setQuitOnLastWindowClosed(False)
     cfg = cfg or Config()
+    # R3 测试基建：同 tests/test_ui.py::_window——关闭控制服务，避免测试写真实
+    # %APPDATA% 且避免用例结束时 QThread 仍运行导致解释器退出 qFatal（0xC0000409）。
+    cfg.set("control_enabled", False)
     svc = PriceService(tmp_path / "last.json")
     hist = HistoryStore(tmp_path / "history.json")
     w = PetWindow(cfg, svc, hist, auto_refresh=False,

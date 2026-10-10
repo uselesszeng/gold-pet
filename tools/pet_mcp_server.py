@@ -54,8 +54,7 @@ def _discover() -> tuple[int, str]:
         info = json.loads(_INFO_PATH.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise RuntimeError(
-            "桌宠没有在运行（未找到接入信息 control.json）。"
-            "请先启动黄金桌宠，再调用本工具。"
+            "桌宠没有在运行（未找到接入信息 control.json）。请先启动黄金桌宠，再调用本工具。"
         ) from None
     except (ValueError, RecursionError):
         raise RuntimeError("接入信息文件损坏，请重启黄金桌宠。") from None

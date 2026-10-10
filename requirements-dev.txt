@@ -1,6 +1,7 @@
 # 开发 / 打包用依赖（运行程序本身只需要 requirements.txt）
 pytest>=8.0
 pytest-cov>=5.0
-ruff>=0.6
 mypy>=1.10
 pyinstaller>=6.3
+# 与 CI 门禁版本对齐：ruff 0.17 起格式化规则变化较大，固定在此版本线上，避免本地/CI 结果漂移
+ruff>=0.17,<0.18

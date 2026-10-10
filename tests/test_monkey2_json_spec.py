@@ -37,14 +37,17 @@ DEEP_20000 = "[" * 20000 + "]" * 20000
 
 SPEC_DOCS = [
     # (名称, JSON 文本) —— 全部必须被安全消化
-    ("重复键后值覆盖", '{"interval_sec": 15, "interval_sec": 900, "metal": "silver", "metal": "gold"}'),
+    (
+        "重复键后值覆盖",
+        '{"interval_sec": 15, "interval_sec": 900, "metal": "silver", "metal": "gold"}',
+    ),
     ("__proto__/constructor 键", '{"__proto__": {"x": 1}, "constructor": 2, "metal": "silver"}'),
     ("-0 整数", '{"interval_sec": -0, "alert_pct": -0.0, "opacity": -0.0}'),
     ("1e999 -> inf", '{"alert_pct": 1e999, "target_high": -1e999, "opacity": 1e999}'),
     ("1e-999 下溢", '{"alert_pct": 1e-999, "target_high": 1e-999}'),
     ("NUL 转义键与值", '{"metal": "gold\\u0000x", "键\\u0000": 1}'),
-    ("嵌套 2000 层（合法解析）", '{"pos": ' + DEEP_2000 + '}'),
-    ("大整数字面量", '{"interval_sec": ' + BIG_INT + ', "alert_cooldown_sec": ' + BIG_INT + '}'),
+    ("嵌套 2000 层（合法解析）", '{"pos": ' + DEEP_2000 + "}"),
+    ("大整数字面量", '{"interval_sec": ' + BIG_INT + ', "alert_cooldown_sec": ' + BIG_INT + "}"),
     ("BOM 前缀（字节层）", '\ufeff{"metal": "silver"}'),
 ]
 
@@ -75,9 +78,9 @@ def test_r2_json_spec_history_loader(tmp_path):
         '{"gold|cny_g": [{"t":1,"p":1},{"t":1,"p":1},{"t":-0,"p":-0.0}]}',
         '{"gold|cny_g": [{"t":1e999,"p":1e999}]}, "dup": 1}',
         '{"g\\u0000k": [{"t":1,"p":1,"x":"a\\u0000b"}]}',
-        '{"gold|cny_g": ' + DEEP_2000 + '}',
-        '{"gold|cny_g": ' + DEEP_20000 + '}',
-        '{"gold|cny_g": [{"t":' + BIG_INT + ',"p":' + BIG_INT + '}]}',
+        '{"gold|cny_g": ' + DEEP_2000 + "}",
+        '{"gold|cny_g": ' + DEEP_20000 + "}",
+        '{"gold|cny_g": [{"t":' + BIG_INT + ',"p":' + BIG_INT + "}]}",
         '{"__proto__": [{"t":1,"p":1}], "constructor": {"t": 1}}',
         "\ufeff" + '{"gold|cny_g": [{"t":1,"p":1}]}',
         '{"gold|cny_g": [{"t":1,"p":1},{"t":"1","p":1e999}]}',
@@ -174,7 +177,8 @@ def test_r2_mcp_bridge_discover_validation(tmp_path):
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
-        "pet_mcp_server_test", Path(__file__).resolve().parent.parent / "tools" / "pet_mcp_server.py"
+        "pet_mcp_server_test",
+        Path(__file__).resolve().parent.parent / "tools" / "pet_mcp_server.py",
     )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

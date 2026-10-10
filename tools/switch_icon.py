@@ -27,15 +27,27 @@ ICONS_DIR = ROOT / "assets" / "icons"
 
 # 版本号 -> (png 文件名, ico 文件名, 说明)
 VERSIONS: dict[str, tuple[str, str, str]] = {
-    "v055": ("icon-v055-gold.png", "icon-v055-gold.ico", "金色鲸鱼女仆（v0.5.5~v0.5.6 同款，PIL 自绘）"),
-    "v060": ("icon-v060-whale.png", "icon-v060-whale.ico", "DeepSeek 鲸鱼娘（v0.6.0 起默认，画师素材）"),
+    "v055": (
+        "icon-v055-gold.png",
+        "icon-v055-gold.ico",
+        "金色鲸鱼女仆（v0.5.5~v0.5.6 同款，PIL 自绘）",
+    ),
+    "v060": (
+        "icon-v060-whale.png",
+        "icon-v060-whale.ico",
+        "DeepSeek 鲸鱼娘（v0.6.0 起默认，画师素材）",
+    ),
 }
 
 
 def list_versions() -> None:
     current_found = False
     for name, (png, _ico, desc) in VERSIONS.items():
-        mark = "  当前" if (ROOT / "assets" / "icon.png").read_bytes() == (ICONS_DIR / png).read_bytes() else ""
+        mark = (
+            "  当前"
+            if (ROOT / "assets" / "icon.png").read_bytes() == (ICONS_DIR / png).read_bytes()
+            else ""
+        )
         if mark:
             current_found = True
         print(f"  {name:<6} {desc}{mark}")

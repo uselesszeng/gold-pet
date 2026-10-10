@@ -12,7 +12,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 项目根入 sys.path（同 test_main.py 惯例）
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)  # 项目根入 sys.path（同 test_main.py 惯例）
 
 import random
 import time
@@ -36,16 +38,18 @@ def _make_window(tmp_path, cfg=None):
     cfg.set("control_enabled", False)
     svc = PriceService(tmp_path / "last.json")
     hist = HistoryStore(tmp_path / "history.json")
-    w = PetWindow(cfg, svc, hist, auto_refresh=False,
-                  notifier_history_path=tmp_path / "alert_history.json")
+    w = PetWindow(
+        cfg, svc, hist, auto_refresh=False, notifier_history_path=tmp_path / "alert_history.json"
+    )
     return w
 
 
 def test_monkey_ui_update_spark_dirty_series(tmp_path):
     """200 次脏历史序列：范围内无点的回退分支不炸（M-11）。"""
     rnd = random.Random(SEED)
-    quote = Quote(code="t", name="n", price=900.0, prev_close=895.0,
-                  high=901.0, low=894.0, unit="元/克")
+    quote = Quote(
+        code="t", name="n", price=900.0, prev_close=895.0, high=901.0, low=894.0, unit="元/克"
+    )
     p_variants = [123.4, "123.4", None, "abc", float("nan"), 0]
     for _ in range(ITERATIONS):
         w = _make_window(tmp_path, cfg=Config({"spark_range": "1h"}))

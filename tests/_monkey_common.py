@@ -130,6 +130,7 @@ def assert_valid_json_text(text: str) -> None:
 
     用 parse_constant 钩子精确检测字面量（子串匹配会把键名里的 "NaN" 误判）。
     """
+
     def _reject(name: str) -> None:
         raise AssertionError(f"状态文件含非法 JSON 字面量 {name}: {text[:200]!r}")
 

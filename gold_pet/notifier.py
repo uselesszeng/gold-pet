@@ -61,6 +61,7 @@ def _safe_float(value, default: float | None = None) -> float | None:
         return default
     return result
 
+
 # 提醒类型
 KIND_PCT = "pct"
 KIND_TARGET = "target"

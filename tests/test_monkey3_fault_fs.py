@@ -19,8 +19,10 @@ import errno
 import json
 import os
 import random
+import shutil
 import stat
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -76,6 +78,22 @@ def _assert_ok_file(kind: str, tmp: Path) -> None:
     target = _target_of(kind, tmp)
     if target.exists():
         assert_valid_json_text(target.read_text(encoding="utf-8"))
+
+
+def _write_bypasses_mode() -> bool:
+    """当前用户写入时是否无视文件权限位（POSIX root 如此，Windows 不受影响）。"""
+    if os.name != "posix":
+        return False
+    probe = Path(tempfile.mkdtemp()) / "probe.txt"
+    probe.write_text("x", encoding="utf-8")
+    os.chmod(probe, stat.S_IREAD)
+    try:
+        probe.write_text("y", encoding="utf-8")
+        return True
+    except OSError:
+        return False
+    finally:
+        shutil.rmtree(probe.parent, ignore_errors=True)
 
 
 class _Fault:
@@ -157,7 +175,13 @@ def test_r3_fs_atomic_write_faults_do_not_escape(tmp_path, monkeypatch, kind, mo
 
 @pytest.mark.parametrize("kind", WRITER_NAMES)
 def test_r3_fs_readonly_target(tmp_path, monkeypatch, kind):
-    """目标文件只读（Windows chmod S_IREAD）时写入器不得抛，原内容保留。"""
+    """目标文件只读（Windows chmod S_IREAD）时写入器不得抛，原内容保留。
+
+    R4：Linux 上以 root 跑（容器 / CI）时，root 无视文件权限位，
+    chmod 只读根本拦不住写入——这不是被测代码的问题，本用例在该环境下无意义。
+    """
+    if _write_bypasses_mode():
+        pytest.skip("root 无视只读权限位，POSIX 侧无法构造只读目标")
     write = _make_writer(kind, tmp_path)
     target = _target_of(kind, tmp_path)
     write()

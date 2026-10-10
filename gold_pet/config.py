@@ -187,13 +187,20 @@ class Config:
             d["spark_range"] = DEFAULTS["spark_range"]
 
         # 动作活跃度：非法值回落标准（M-10：同上）
-        if not isinstance(d.get("activity_level"), str) or d["activity_level"] not in ACTIVITY_LEVELS:
+        if (
+            not isinstance(d.get("activity_level"), str)
+            or d["activity_level"] not in ACTIVITY_LEVELS
+        ):
             d["activity_level"] = DEFAULTS["activity_level"]
 
         # 关怀提醒：开关布尔化，间隔收敛到可选档位
         for care_key in ("care_drink_enabled", "care_posture_enabled", "care_eye_enabled"):
             d[care_key] = bool(d.get(care_key, DEFAULTS[care_key]))
-        for interval_key in ("care_drink_interval_min", "care_posture_interval_min", "care_eye_interval_min"):
+        for interval_key in (
+            "care_drink_interval_min",
+            "care_posture_interval_min",
+            "care_eye_interval_min",
+        ):
             raw = _as_int(d.get(interval_key), DEFAULTS[interval_key])
             d[interval_key] = raw if raw in CARE_INTERVAL_CHOICES else DEFAULTS[interval_key]
 

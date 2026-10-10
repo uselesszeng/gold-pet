@@ -34,9 +34,9 @@ def test_pet_dir_exists():
     assert PET_DIR.is_dir(), f"缺少素材目录：{PET_DIR}"
 
 
-@pytest.mark.parametrize(("state", "frames", "interval"), sorted(
-    (k, v[0], v[1]) for k, v in STATES.items()
-))
+@pytest.mark.parametrize(
+    ("state", "frames", "interval"), sorted((k, v[0], v[1]) for k, v in STATES.items())
+)
 def test_every_state_has_all_frames(state, frames, interval):
     """每个状态的实际帧数必须等于 STATES 声明的帧数。"""
     missing = [i for i in range(frames) if not (PET_DIR / f"{state}_{i}.png").is_file()]

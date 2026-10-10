@@ -17,6 +17,24 @@ warn_unused_ignores = false
 check_untyped_defs = false
 files = ["gold_pet/price.py", "gold_pet/config.py", "gold_pet/paths.py", "gold_pet/bubble.py"]
 
+[tool.coverage.run]
+source = ["gold_pet"]
+omit = ["gold_pet/__init__.py"]
+
+[tool.coverage.report]
+# 门槛随版本推进：v0.4.1 已达成 72%，门禁设在 65% 留出波动余量
+fail_under = 65
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[project]
+# 许可以仓库根目录 LICENSE 文件为准（MIT + 附加条款：原创署名 / 商用需授权 / 禁止非法）
+license = "SEE LICENSE IN LICENSE"

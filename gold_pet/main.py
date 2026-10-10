@@ -16,22 +16,34 @@ import logging.handlers
 import sys
 import traceback
 
-from . import __version__
+from . import __version__, autostart, shortcut
 from .config import METAL_NAMES, Config, app_dir, asset_dir
 from .price import HistoryStore, PriceService
 from .ui import PetWindow, build_tray
 
 
 def setup_logging(level: str = "INFO") -> None:
-    r"""日志同时写控制台和文件（%APPDATA%\GoldPet\gold-pet.log）。"""
-    log_dir = app_dir()
-    handler = logging.handlers.RotatingFileHandler(
-        log_dir / "gold-pet.log", maxBytes=256 * 1024, backupCount=2, encoding="utf-8"
-    )
+    r"""日志同时写控制台和文件（%APPDATA%\GoldPet\gold-pet.log）。
+
+    R3-M-04：日志文件不可创建/不可写（磁盘满、目录被文件占位、只读）时降级为
+    仅控制台输出。此前 RotatingFileHandler 的 OSError 会在 main() 最前面抛出，
+    降级环境下应用带着裸 traceback 启动即崩，连 --version 都用不了。
+    """
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    try:
+        log_dir = app_dir()
+        handlers.insert(
+            0,
+            logging.handlers.RotatingFileHandler(
+                log_dir / "gold-pet.log", maxBytes=256 * 1024, backupCount=2, encoding="utf-8"
+            ),
+        )
+    except OSError:
+        print("警告：日志文件不可写，本次仅输出到控制台", file=sys.stderr)
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[handler, logging.StreamHandler(sys.stdout)],
+        handlers=handlers,
     )
 
     def excepthook(exc_type, exc, tb):
@@ -40,6 +52,30 @@ def setup_logging(level: str = "INFO") -> None:
         )
 
     sys.excepthook = excepthook
+
+
+def _ensure_utf8_stdout() -> None:
+    r"""让控制台输出用 UTF-8，避免打包后中文变乱码。
+
+    PyInstaller --noconsole 打包出的 exe 在 Windows 上 sys.stdout.encoding 常为
+    cp936(GBK)，打印中文（如 --version）会显示成「»Æ½ð×À³è」。这里显式重设为 UTF-8，
+    并在 Windows 上一并切换控制台代码页；失败时静默忽略（不影响主流程）。
+    """
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        except Exception:
+            pass
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -70,7 +106,47 @@ def run_once(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
+def _maybe_onboard(window, first_run: bool, log) -> None:
+    """首次运行引导：询问是否创建快捷方式（仅打包后的 exe）。
+
+    为什么要做这件事：桌宠不进任务栏是产品设计（Qt.Tool），
+    用户双击 exe 后关掉窗口就再也找不到入口了。
+    小白用户会认为「程序丢了」，实际它只是回到托盘里。
+
+    源码运行（开发模式）跳过：此时快捷方式指向 pythonw.exe + run.py，
+    对用户没有意义，只会在桌面留下垃圾。
+    """
+    if not first_run or not getattr(sys, "frozen", False):
+        return
+    if not shortcut.is_supported():
+        return
+
+    from .ui import FirstRunDialog
+
+    tray_ok = window.tray_icon() is not None
+    dlg = FirstRunDialog(window, has_tray=tray_ok)
+    # exec() 返回非 0 表示点了「好呀」；用户选「暂时不用」则什么都不做
+    if dlg.exec() == 0:
+        return
+
+    icon = asset_dir() / "icon.ico"
+    wheres = []
+    if dlg.wants_desktop():
+        wheres.append("desktop")
+    if dlg.wants_startmenu():
+        wheres.append("startmenu")
+    if wheres:
+        results = shortcut.create_many(wheres, icon=icon if icon.exists() else None)
+        log.info("首启引导已创建快捷方式：%s", results)
+    if dlg.wants_autostart():
+        autostart.set_enabled(True)
+        window.cfg.set("autostart", True)
+        window.cfg.save()
+        log.info("首启引导已开启开机自启")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _ensure_utf8_stdout()
     args = parse_args(argv)
     setup_logging(args.log_level)
     log = logging.getLogger("gold_pet")
@@ -91,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
-    # 单实例保护：已经有一个金娘在跑就直接退出（业界通用做法：文件锁）
+    # 单实例保护：已经有一个鲸娘在跑就直接退出（业界通用做法：文件锁）
     lock = QLockFile(str(app_dir() / ".gold-pet.lock"))
     lock.setStaleLockTime(30 * 1000)
     if not lock.tryLock(100):
@@ -117,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     window.show()
     if first_run:
         window.welcome()  # 首次运行：说句话 + 托盘气泡引导
+        _maybe_onboard(window, first_run, log)  # 首启引导：快捷方式
     log.info("界面已启动")
     return app.exec()
 

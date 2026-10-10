@@ -5,4 +5,32 @@ dist/
 *.spec
 !gold-pet.spec
 .venv/
+
+# 测试与覆盖率产物（不应入库）
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# 本地备份
+*.bak
+*.orig
+
+# 调试截图（tools/grab_screen.py 的产物）
+*.bmp
+
+# 诊断脚本产物（tools/diag_*.py 的截图与临时配置）
+tools/_out/
+_diag_tmp/
+
+# PyInstaller 生成的版本资源（gold-pet.spec 构建时写出，随包名变化）
+version_info.txt
+
+# 发布包暂存（体积大，不进仓库；通过 Release 附件分发）
+release/
+_backup_v055/
+pet_shot.*
+
+# WorkBuddy 本地记忆目录（不入库）
+.workbuddy/

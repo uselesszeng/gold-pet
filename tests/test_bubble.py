@@ -74,3 +74,12 @@ def test_line_and_cache_html():
     assert "你好" in render_line_html("你好")
     html = render_cache_html("黄金", _quote(897.15, 900.37))
     assert "897.15" in html and "离线" in html
+
+
+def test_line_html_escapes_external_text():
+    """P2-01：外部文本（如 /say 自由发言）必须转义，不能注入 HTML/本地图片。"""
+    out = render_line_html('<img src="file:///C:/x.png" width=800>')
+    assert "<img" not in out
+    assert "&lt;img" in out
+    # 普通文本不受转义影响
+    assert "主人好呀" in render_line_html("主人好呀")

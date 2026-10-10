@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import html
 import time
 
 from .price import Quote
@@ -82,13 +83,33 @@ def render_price_html(
 
 
 def render_line_html(text: str) -> str:
-    """渲染一句话气泡（台词 / 引导）。"""
-    return f'<div style="font-size:12px;color:#ffd978">{text}</div>'
+    """渲染一句话气泡（台词 / 引导）。
+
+    P2-01：text 统一做 HTML 转义后再插值。QLabel 按富文本渲染，未转义的
+    外部文本（如 AI 控制服务 /say 的自由发言）可注入 <img>/<table> 等标签，
+    甚至加载本地图片。转义收口在渲染边界，台词池等内部文本不含 HTML 标记，
+    显示不受影响；/say 端点不再自行转义，避免双重转义。
+    """
+    return f'<div style="font-size:12px;color:#ffd978">{html.escape(text)}</div>'
 
 
-def render_cache_html(metal_name: str, quote: Quote) -> str:
-    """离线且无缓存数据外的兜底展示。"""
+def render_cache_html(metal_name: str, quote: Quote, updated_at: float | None = None) -> str:
+    """离线时展示上次缓存的价格。
+
+    updated_at 为缓存写入时间，会显示为「缓存于 xx:xx」并在超过 1 小时时提示数据陈旧，
+    避免用户把几天前的价格当成现价。
+    """
+    stamp = ""
+    if updated_at:
+        clock = time.strftime("%m-%d %H:%M", time.localtime(updated_at))
+        age = time.time() - updated_at
+        if age >= 3600:
+            hours = int(age // 3600)
+            stale = f" · 已过期 {hours} 小时" if hours < 48 else " · 数据陈旧"
+            stamp = f'<div style="font-size:11px;color:#ffd666">缓存于 {clock}{stale}</div>'
+        else:
+            stamp = f'<div style="font-size:11px;color:#aaaaaa">缓存于 {clock}</div>'
     return (
         f"{metal_name} {quote.format_price()} {quote.unit}<br>"
-        f'<span style="color:{FLAT_COLOR}">离线 · 缓存</span>'
+        f'<span style="color:{FLAT_COLOR}">离线 · 缓存</span>{stamp}'
     )

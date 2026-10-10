@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
@@ -120,6 +121,36 @@ def test_history_dedupe_and_cap(tmp_path):
     )
     store.append("gold", "cny_g", 999.0)
     assert len(store.series("gold", "cny_g")) == 5  # 上限生效
+
+
+def test_history_load_skips_dirty_points(tmp_path):
+    """P2-03：history.json 手改坏（非 dict / t、p 非数值）后逐项剔除不炸链路。
+
+    修复前：float()/dict.get 遇坏点直接抛 ValueError/AttributeError，
+    中断走势图渲染与 append 写入；修复后坏点剔除并保留好点。
+    """
+    path = tmp_path / "h.json"
+    path.write_text(
+        json.dumps(
+            {
+                key("gold", "cny_g"): [
+                    {"t": time.time() - 120, "p": 900.0},  # 正常点
+                    "not-a-dict",  # 非 dict
+                    {"t": "abc", "p": 1.0},  # t 非数值
+                    {"t": time.time(), "p": None},  # p 非数值
+                    [1, 2],  # 列表不是 dict
+                ],
+                key("silver", "cny_g"): "整条序列不是列表",
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = HistoryStore(path)
+    assert len(store.series("gold", "cny_g")) == 1
+    assert store.series("silver", "cny_g") == []
+    # append 不抛异常：旧代码 series[-1].get 遇非 dict 点会 AttributeError
+    store.append("gold", "cny_g", 901.0)
+    assert store.series("gold", "cny_g")[-1]["p"] == 901.0
 
 
 def test_converted_quote_keeps_high_low():

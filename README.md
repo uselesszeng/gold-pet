@@ -18,6 +18,27 @@
 > 全部版本见 [Releases](https://cnb.cool/TJ-coding/gold-pet/-/releases)。
 > 校验文件：`GoldPet-v0.8.0-win64.exe.sha256`。
 
+### 最新版 v0.8.1（稳定性与数据安全）
+
+v0.8.1 **没有 Windows exe 附件**，因为发布环境只有 Linux 节点，无法产出
+Windows 可执行文件 —— 这里不拿别的东西冒充 exe。需要 exe 请在 **Windows 本机**：
+
+```bat
+build.bat        :: 等价于 pyinstaller gold-pet.spec，产物在 dist\GoldPet.exe
+```
+
+v0.8.1 提供**源码归档**：
+
+| 产物 | 直链 |
+|---|---|
+| 源码归档 `GoldPet-v0.8.1-src.tar.gz` | [⬇️ 下载](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.8.1/GoldPet-v0.8.1-src.tar.gz) |
+| SHA256 校验 | [⬇️ 下载](https://cnb.cool/TJ-coding/gold-pet/-/releases/download/v0.8.1/GoldPet-v0.8.1-src.tar.gz.sha256) |
+
+> v0.8.1 修了 8 个缺陷（含 2 个 P1：配置损坏被静默整份归零、CI 三阶段从未运行）。
+> 如果你的配置文件曾被程序改回默认值，升级到 v0.8.1 后不会再发生 ——
+> 损坏的配置会被留档成 `settings.json.corrupt` 让你能找回。
+> 详细变更见 [CHANGELOG.md](CHANGELOG.md) 的 0.8.1 段。
+
 ### 喜欢哪个形象，就下哪个版本
 
 桌宠形象经历了多次更换，每个 Release 的 exe 都完整保留着**当时的形象**，
@@ -401,6 +422,22 @@ Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授�
 - 该素材按其**非商业使用许可**分发：本项目为免费、无营利的非商业用途，符合许可范围；
   若你将本程序用于商业场景，请自行移除该素材或取得原作者授权。
 - 本项目代码部分仍为 MIT；素材部分的版权遵循其原作者声明。
+
+## v0.8.1 稳定性与数据安全
+
+**无新功能**，一次发版前摸底：高强度 Monkey + 全量代码评审 + 存量缺陷单复测。
+
+- **🔒 配置不再无声丢失**：以前 `settings.json` 被改坏一个字符，程序会**静默**把配置
+  整份归零，退出时还用默认值把原文件覆写掉 —— 你的品种/间隔/阈值/勿扰设置就此**永久消失**。
+  现在损坏的配置会被留档成 `settings.json.corrupt`（保留最早现场），你可以人工找回。
+- **🔒 写入失败不再毁配置**：配置写入改为**原子写**，磁盘满 / 进程被杀时原文件保持完好，
+  不会再留下半截 JSON 把配置带崩。
+- **🔒 开关不再是「关了个寂寞」**：以前配置里把布尔写成字符串（`"false"`）会被当成「开」，
+  勾了关闭重启又自己开。现在按语义正确解析。
+- **🐛 修掉三条「静默崩溃」**：手改 `history.json` 的时间戳格式、`alert_history.json` 的
+  类型、`last_price.json` 的时间戳越界，以前都会让刷新链 / 提醒历史窗口崩掉，现在都能兜住。
+- **🔧 门禁真正生效**：CI 的 `lint` / `type check` / `test` 三个阶段**此前从未运行过**
+  （`requirements.txt` 一个引号让 `install deps` 直接失败）—— 现已修通，六阶段全绿。
 
 ## v0.8.0 AI 控制鲸娘
 

@@ -39,7 +39,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .price import Quote, _atomic_write_text
+from .price import Quote, _atomic_write_text, safe_strftime
 
 logger = logging.getLogger("gold_pet")
 
@@ -120,7 +120,18 @@ class Alert:
 
     @property
     def kind_name(self) -> str:
-        return KIND_NAMES.get(self.kind, self.kind)
+        """提醒类型的展示名（R5-BUG-2）。
+
+        `kind` 来自手改过的 alert_history.json，可能是 list/dict/set 这类
+        **不可哈希**值：`KIND_NAMES.get(kind, ...)` 会抛 TypeError
+        （unhashable type），而调用方是「提醒历史」窗口的列表填充——
+        坏文件会让窗口打开即崩。这里先要求 kind 可哈希（str 优先），
+        否则回落为固定占位文案；纯展示层收敛，不改数据语义。
+        """
+        try:
+            return KIND_NAMES.get(self.kind, str(self.kind))
+        except TypeError:  # 不可哈希的脏 kind
+            return "提醒"
 
 
 def in_quiet_hours(
@@ -220,8 +231,12 @@ class Notifier:
         return max(0, int(self.cfg.get("alert_cooldown_sec", 600)))
 
     def _roll_day(self, now: float) -> None:
-        """跨日时清空当日水位：新的一天重新计「今日新高」。"""
-        day = time.strftime("%Y-%m-%d", time.localtime(now))
+        """跨日时清空当日水位：新的一天重新计「今日新高」。
+
+        R5-BUG-3：now 可能来自注入/损坏的时间源，localtime 会抛 OverflowError；
+        解析不出日期时用占位值（等价于「换了一天」，清空水位是安全方向）。
+        """
+        day = safe_strftime("%Y-%m-%d", now, fallback="?")
         if day != self._day:
             self._day = day
             self._extreme_water.clear()
@@ -466,8 +481,18 @@ def spark_cutoff(range_key: str, now: float | None = None) -> float | None:
     if range_key == "1h":
         return (now if now is not None else time.time()) - 3600
     if range_key == "today":
-        local = time.localtime(now if now is not None else time.time())
-        return time.mktime((local.tm_year, local.tm_mon, local.tm_mday, 0, 0, 0, 0, 0, -1))
+        # R5-BUG-3 同族：now 可能是注入的极端值（测试/损坏时间源），
+        # localtime 对超出平台 time_t 的输入抛 OverflowError。
+        # 取不到当天零点时回落「不限制」，走势图照常画（不因时间源异常空图）。
+        stamp = now if now is not None else time.time()
+        try:
+            local = time.localtime(float(stamp))
+        except (TypeError, ValueError, OverflowError, OSError):
+            return None
+        try:
+            return time.mktime((local.tm_year, local.tm_mon, local.tm_mday, 0, 0, 0, 0, 0, -1))
+        except (OverflowError, ValueError, OSError):
+            return None
     return None
 
 

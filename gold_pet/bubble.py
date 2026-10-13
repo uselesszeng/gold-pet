@@ -8,7 +8,7 @@ from __future__ import annotations
 import html
 import time
 
-from .price import Quote
+from .price import Quote, safe_strftime
 
 # 涨红跌绿（国内习惯）
 UP_COLOR = "#ff4d4f"
@@ -69,7 +69,9 @@ def render_price_html(
         )
     footer = ""
     if updated_at is not None:
-        clock = time.strftime("%H:%M:%S", time.localtime(updated_at))
+        # R5-BUG-4：updated_at 可能来自手改缓存（1e308 会让 localtime 抛
+        # OverflowError 崩掉整个刷新渲染链），统一走安全格式化。
+        clock = safe_strftime("%H:%M:%S", updated_at)
         suffix = f" · {tip_html}" if tip_html else ""
         footer = f'<div style="font-size:11px;color:#aaaaaa">更新 {clock}{suffix}</div>'
     elif tip_html:
@@ -101,7 +103,8 @@ def render_cache_html(metal_name: str, quote: Quote, updated_at: float | None = 
     """
     stamp = ""
     if updated_at:
-        clock = time.strftime("%m-%d %H:%M", time.localtime(updated_at))
+        # R5-BUG-4：同上，缓存时间戳不可信
+        clock = safe_strftime("%m-%d %H:%M", updated_at)
         age = time.time() - updated_at
         if age >= 3600:
             hours = int(age // 3600)

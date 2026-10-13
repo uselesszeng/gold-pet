@@ -157,17 +157,42 @@ def test_r3_fs_atomic_write_faults_do_not_escape(tmp_path, monkeypatch, kind, mo
 
 @pytest.mark.parametrize("kind", WRITER_NAMES)
 def test_r3_fs_readonly_target(tmp_path, monkeypatch, kind):
-    """目标文件只读（Windows chmod S_IREAD）时写入器不得抛，原内容保留。"""
+    """目标文件只读时的写入语义（跨平台口径修正，R5）。
+
+    ⚠️ 原用例是**平台假设错误**，不是产品缺陷（本仓基线稳定 2 例红的根因）：
+    它假定「chmod S_IREAD 后写入必然失败、文件字节不变」。实际语义是——
+
+      - Windows：目标文件带只读属性时 `os.replace` 以 EACCES 失败，写入被吞
+        （原用例的 `assert after == before` 正是为这条路径写的）；
+      - POSIX：`rename(2)` 看的是**目录**写权限，目标文件自身 0444 不阻止
+        覆盖（实测 chmod 0o400 后 replace 照样成功、内容真的被更新，且新
+        inode 的权限位回落 0644）。
+
+    同时原用例的 `after == before` 是**字节级**比较，而 history / alerts 两次
+    写入各自调用 `time.time()`，纳秒位必然不同——即使在 Windows 上也只在
+    「写入恰好失败」时序下偶然成立。
+
+    因此这里改为按**平台真实语义**断言，两边都验到：
+      - POSIX：写入成功生效，且文件仍是严格合法 JSON、无 tmp 残留；
+      - Windows：写入被容错吞掉，原数据保持不变。
+    「不得抛异常」与「无 tmp 残留」是跨平台共同底线。
+    """
     write = _make_writer(kind, tmp_path)
     target = _target_of(kind, tmp_path)
     write()
-    before = target.read_text(encoding="utf-8")
+    before = json.loads(target.read_text(encoding="utf-8"))
     os.chmod(target, stat.S_IREAD)
     try:
-        write()
+        write()  # 共同底线：任何平台都不得抛异常逃逸
     finally:
-        os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
-    assert target.read_text(encoding="utf-8") == before
+        os.chmod(target, stat.S_IWUSR | stat.S_IRUSR)
+    after = json.loads(target.read_text(encoding="utf-8"))
+    if os.name == "nt":
+        # Windows：只读目标让 replace 失败，原数据必须原样保留
+        assert after == before, "Windows 上只读目标的写失败路径破坏了原数据"
+    else:
+        # POSIX：写入正常生效（这不是缺陷，是文件系统语义）
+        assert isinstance(after, (dict, list))
     assert _no_tmp_leftovers(tmp_path) == []
     _assert_ok_file(kind, tmp_path)
 

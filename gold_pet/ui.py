@@ -68,7 +68,7 @@ from .notifier import (
     in_quiet_hours,
 )
 from .paths import alert_history_path, asset_dir
-from .price import METALS, Snapshot, is_market_open
+from .price import METALS, Snapshot, is_market_open, safe_strftime
 
 # 每种状态的帧数与播放间隔（毫秒）
 # v0.6.0：素材替换为 dsh-whale-pet 鲸鱼娘（帧数/间隔按各 GIF 实测平均延迟）
@@ -1524,7 +1524,9 @@ class AlertHistoryDialog(QDialog):
             self.list.addItem("暂无提醒记录")
             return
         for alert in items:
-            clock = time.strftime("%m-%d %H:%M:%S", time.localtime(alert.at))
+            # R5-BUG-3：alert.at 来自手改的 alert_history.json（可能 1e308），
+            # localtime 抛 OverflowError 会让「提醒历史」窗口打开即崩。
+            clock = safe_strftime("%m-%d %H:%M:%S", alert.at)
             self.list.addItem(f"[{clock}] {alert.kind_name}｜{alert.body}")
 
     def _clear(self) -> None:

@@ -83,9 +83,7 @@ def test_say_text_dispatch(pet_server):
 
 def test_say_mood_dispatch(pet_server):
     base, actions = pet_server
-    resp = httpx.post(
-        f"{base}/say", json={"mood": "up"}, headers={"X-GP-Token": TOKEN}, timeout=2
-    )
+    resp = httpx.post(f"{base}/say", json={"mood": "up"}, headers={"X-GP-Token": TOKEN}, timeout=2)
     assert resp.status_code == 200
     assert actions == [{"action": "say", "mood": "up"}]
 
@@ -99,9 +97,7 @@ def test_say_missing_params_400(pet_server):
 
 def test_say_blank_text_400(pet_server):
     base, _ = pet_server
-    resp = httpx.post(
-        f"{base}/say", json={"text": "   "}, headers={"X-GP-Token": TOKEN}, timeout=2
-    )
+    resp = httpx.post(f"{base}/say", json={"text": "   "}, headers={"X-GP-Token": TOKEN}, timeout=2)
     assert resp.status_code == 400
 
 

@@ -325,7 +325,9 @@ def test_extreme_low_requires_strictly_new_watermark():
     cfg.set("alert_extreme_step_pct", 0.0)  # 本用例只验证水位
     n = Notifier(cfg)
     first = make_quote(price=896.33, prev=900.0, high=907.6, low=896.33)
-    assert any(a.kind == KIND_EXTREME and a.side == "low" for a in n.evaluate(first, "黄金", now=1.0))
+    assert any(
+        a.kind == KIND_EXTREME and a.side == "low" for a in n.evaluate(first, "黄金", now=1.0)
+    )
     assert n.evaluate(first, "黄金", now=2.0) == []
 
     deeper = make_quote(price=895.0, prev=900.0, high=907.6, low=895.0)

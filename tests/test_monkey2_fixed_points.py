@@ -51,11 +51,30 @@ def test_r2_converters_overflow_and_variants(tmp_path):
     """500 次：JSON 可达 + Python 变体（bytes/Decimal/bytearray）全部安全收敛。"""
     rnd = random.Random(SEED)
     variants = [
-        10**400, -(10**400), 10**1024, 2**5000,
-        b"1.5", bytearray(b"2.5"), Decimal("NaN"), Decimal("sNaN"),
-        Decimal("1e999"), "1e999", "-1e999", 1e308 * 10, -1e308 * 10,
-        float("inf"), float("-inf"), float("nan"), True, False, None,
-        [1], {"a": 1}, "0x10", "", "   ",
+        10**400,
+        -(10**400),
+        10**1024,
+        2**5000,
+        b"1.5",
+        bytearray(b"2.5"),
+        Decimal("NaN"),
+        Decimal("sNaN"),
+        Decimal("1e999"),
+        "1e999",
+        "-1e999",
+        1e308 * 10,
+        -1e308 * 10,
+        float("inf"),
+        float("-inf"),
+        float("nan"),
+        True,
+        False,
+        None,
+        [1],
+        {"a": 1},
+        "0x10",
+        "",
+        "   ",
     ]
     for _ in range(ITERATIONS):
         v = rnd.choice(variants) if rnd.random() < 0.7 else _rnd_huge_int(rnd)
@@ -76,8 +95,10 @@ def test_r2_huge_int_through_loaders(tmp_path):
     cp = tmp_path / "cache.json"
     sp = tmp_path / "settings.json"
     for _ in range(ITERATIONS):
-        huge = 10**rnd.choice([400, 1024, 4000]) * rnd.choice([1, -1])
-        hp.write_text(json.dumps({"gold|cny_g": [{"t": 1, "p": 1}, {"t": huge, "p": 2}]}), encoding="utf-8")
+        huge = 10 ** rnd.choice([400, 1024, 4000]) * rnd.choice([1, -1])
+        hp.write_text(
+            json.dumps({"gold|cny_g": [{"t": 1, "p": 1}, {"t": huge, "p": 2}]}), encoding="utf-8"
+        )
         hs = HistoryStore(hp)
         data = hs.load()
         assert isinstance(data, dict) and "gold|cny_g" in data
@@ -90,7 +111,9 @@ def test_r2_huge_int_through_loaders(tmp_path):
         snap = PriceService(cp).load_cache()
         assert snap is not None and isinstance(snap.fx, float)
 
-        sp.write_text(json.dumps({"interval_sec": huge, "alert_pct": huge, "opacity": huge}), encoding="utf-8")
+        sp.write_text(
+            json.dumps({"interval_sec": huge, "alert_pct": huge, "opacity": huge}), encoding="utf-8"
+        )
         cfg = Config.load(sp)
         assert cfg.get("interval_sec") in (15, 30, 60, 300, 900)
         assert 0.0 <= cfg.get("opacity") <= 1.0
@@ -114,8 +137,11 @@ def test_r2_quote_change_finite():
             prev = abs(rnd.uniform(0, 1000))
         q = Quote(code="t", name="t", price=price, prev_close=prev, high=0.0, low=0.0)
         text = json.dumps(
-            {"change": round(q.change, 4), "change_pct": round(q.change_pct, 3),
-             "p": q.format_price()},
+            {
+                "change": round(q.change, 4),
+                "change_pct": round(q.change_pct, 3),
+                "p": q.format_price(),
+            },
             allow_nan=False,
         )
         assert_valid_json_text(text)  # 含 NaN/Infinity 即失败
@@ -131,11 +157,18 @@ def test_r2_cli_price_json_legal(tmp_path, monkeypatch, capsys):
     raw = {
         "quotes": {
             "gold|cny_g": {
-                "code": "gds_AUTD", "name": "x", "price": 1.0, "prev_close": 1e-308,
-                "high": 1.0, "low": 1.0,
+                "code": "gds_AUTD",
+                "name": "x",
+                "price": 1.0,
+                "prev_close": 1e-308,
+                "high": 1.0,
+                "low": 1.0,
             }
         },
-        "fx": 0.0, "updated_at": 1.0, "ok": True, "error": "",
+        "fx": 0.0,
+        "updated_at": 1.0,
+        "ok": True,
+        "error": "",
     }
     cp = tmp_path / "last_price.json"
     cp.write_text(json.dumps(raw), encoding="utf-8")
@@ -178,8 +211,9 @@ def test_r2_say_truncation_boundaries(pet_server):
             # 手工编码：httpx 的 json= 无法发送孤代理对（ensure_ascii=False + utf-8 编码会炸），
             # 而 \udXXX 转义正是服务端必须消化的合法 JSON 输入
             content = json.dumps({"text": text}, ensure_ascii=True).encode("utf-8")
-            r = s.post("/say", content=content,
-                       headers={"Content-Type": "application/json; charset=utf-8"})
+            r = s.post(
+                "/say", content=content, headers={"Content-Type": "application/json; charset=utf-8"}
+            )
             assert r.status_code == 200, r.text[:120]
             assert isinstance(r.json().get("ok"), bool)
         got = actions[before:]
@@ -191,14 +225,16 @@ def test_r2_say_truncation_boundaries(pet_server):
 
 def test_r2_to_coord_magnitude_variants():
     """_to_coord 量级变体：int32 内返回 int、超界由 UI 层夹取（R2-M-02 配套），绝不抛。"""
-    for v in [0, 1, -(2**31), 2**31 - 1, 2**31, 2**40, 10**400, -10**400, -0.0, 3.7, -3.7]:
+    for v in [0, 1, -(2**31), 2**31 - 1, 2**31, 2**40, 10**400, -(10**400), -0.0, 3.7, -3.7]:
         r = _to_coord(v)
         assert r is None or isinstance(r, int)
 
 
 def test_r2_decimal_bytes_via_snapshot(tmp_path):
     """Decimal/bytes 等非 JSON 类型经 Snapshot.from_dict 的收敛路径（_num 内部）。"""
-    snap = Snapshot.from_dict({"quotes": {"k": {"price": Decimal("NaN"), "prev_close": b"1"}}, "fx": Decimal("1e999")})
+    snap = Snapshot.from_dict(
+        {"quotes": {"k": {"price": Decimal("NaN"), "prev_close": b"1"}}, "fx": Decimal("1e999")}
+    )
     assert isinstance(snap.fx, float)
     assert "k" in snap.quotes  # price 0.0 兜底，prev_close 0.0，均为有限值
     assert all(

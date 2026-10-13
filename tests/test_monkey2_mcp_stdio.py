@@ -27,9 +27,16 @@ import pytest
 SEED = 20261016
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SERVER = PROJECT_ROOT / "tools" / "pet_mcp_server.py"
-INIT = {"jsonrpc": "2.0", "id": 0, "method": "initialize",
-        "params": {"protocolVersion": "2024-11-05", "capabilities": {},
-                   "clientInfo": {"name": "monkey2", "version": "0"}}}
+INIT = {
+    "jsonrpc": "2.0",
+    "id": 0,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": {"name": "monkey2", "version": "0"},
+    },
+}
 
 pytestmark = pytest.mark.skipif(
     importlib.util.find_spec("mcp") is None, reason="当前解释器未安装 mcp 包"
@@ -42,7 +49,9 @@ class BridgeSession:
     def __init__(self):
         self.p = subprocess.Popen(
             [sys.executable, str(SERVER)],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         self.lines: list[str] = []
         self._t = threading.Thread(target=self._pump, daemon=True)
@@ -74,7 +83,11 @@ class BridgeSession:
                     msg = json.loads(ln)
                 except ValueError:
                     continue
-                if isinstance(msg, dict) and msg.get("id") == req_id and ("result" in msg or "error" in msg):
+                if (
+                    isinstance(msg, dict)
+                    and msg.get("id") == req_id
+                    and ("result" in msg or "error" in msg)
+                ):
                     return msg
             time.sleep(0.02)
         return None
@@ -104,9 +117,9 @@ def _scenario(garbage: list[bytes], expect_alive: bool) -> None:
             s.send_raw(g)
         time.sleep(0.5)
         alive = s.ping_ok()
-        assert alive is expect_alive, (
-            f"垃圾灌入后会话活性 {alive}（预期 {expect_alive}），进程状态 {s.p.poll()}"
-        )
+        assert (
+            alive is expect_alive
+        ), f"垃圾灌入后会话活性 {alive}（预期 {expect_alive}），进程状态 {s.p.poll()}"
         assert s.p.poll() is None, "桥进程不应退出"
     finally:
         s.close()
@@ -114,54 +127,76 @@ def _scenario(garbage: list[bytes], expect_alive: bool) -> None:
 
 def test_r2_mcp_survives_syntax_garbage():
     rnd = random.Random(SEED)
-    garbage = [b"hello\n", b"{\n", b"[1,2,3]\n", b'{"jsonrpc": "2.0"}\n',
-               b'{"jsonrpc":"2.0","id":' + str(rnd.randint(1, 99)).encode() + b',"method":}\n']
+    garbage = [
+        b"hello\n",
+        b"{\n",
+        b"[1,2,3]\n",
+        b'{"jsonrpc": "2.0"}\n',
+        b'{"jsonrpc":"2.0","id":' + str(rnd.randint(1, 99)).encode() + b',"method":}\n',
+    ]
     _scenario(garbage, expect_alive=True)
 
 
 def test_r2_mcp_survives_invalid_utf8():
-    _scenario([b"\xff\xfe\x00bad-utf8\n", b"\x80\x81\x82\n", b'{"a": "\xc3\x28"}\n'],
-              expect_alive=True)
+    _scenario(
+        [b"\xff\xfe\x00bad-utf8\n", b"\x80\x81\x82\n", b'{"a": "\xc3\x28"}\n'], expect_alive=True
+    )
 
 
 def test_r2_mcp_survives_10mb_line():
-    _scenario([b'{"jsonrpc":"2.0","method":"ping","id":1,"params":"' + b"A" * (10 * 1024 * 1024) + b'"}\n'],
-              expect_alive=True)
+    _scenario(
+        [
+            b'{"jsonrpc":"2.0","method":"ping","id":1,"params":"'
+            + b"A" * (10 * 1024 * 1024)
+            + b'"}\n'
+        ],
+        expect_alive=True,
+    )
 
 
 def test_r2_mcp_survives_deep_params():
-    deep = (b'{"jsonrpc":"2.0","id":1,"method":"ping","params":'
-            + b"[" * 20000 + b"]" * 20000 + b"}\n")
+    deep = (
+        b'{"jsonrpc":"2.0","id":1,"method":"ping","params":' + b"[" * 20000 + b"]" * 20000 + b"}\n"
+    )
     _scenario([deep], expect_alive=True)
 
 
 def test_r2_mcp_survives_tool_wrong_arg_types():
     """合法工具 + 错误参数类型：pet_say text=123 / pet_move dx=1e400 —— 不得影响会话。"""
-    _scenario([
-        b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pet_say","arguments":{"text":123}}}\n',
-        b'{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pet_move","arguments":{"dx":1e400}}}\n',
-        b'{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pet_play","arguments":{"state":null}}}\n',
-    ], expect_alive=True)
+    _scenario(
+        [
+            b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pet_say","arguments":{"text":123}}}\n',
+            b'{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pet_move","arguments":{"dx":1e400}}}\n',
+            b'{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pet_play","arguments":{"state":null}}}\n',
+        ],
+        expect_alive=True,
+    )
 
 
-@pytest.mark.xfail(reason=(
-    "R2-M-07（P2，遗留）：mcp 1.30 库对畸形入站请求的响应任务会（非确定性）被打死——"
-    "未知方法、tools/call 烂 name/params、畸形 id 类型（1.5/obj/list/bool）单独或组合"
-    "灌入后，进程存活但此后对合法请求永不应答（stderr 为 pydantic literal_error 噪声）。"
-    "同一条消息单独发有时可存活，组合发稳定复现。第三方库域，项目侧无干净的桥内缓解；"
-    "建议升级 mcp 或宿主侧超时重启。"
-), strict=False)
+@pytest.mark.xfail(
+    reason=(
+        "R2-M-07（P2，遗留）：mcp 1.30 库对畸形入站请求的响应任务会（非确定性）被打死——"
+        "未知方法、tools/call 烂 name/params、畸形 id 类型（1.5/obj/list/bool）单独或组合"
+        "灌入后，进程存活但此后对合法请求永不应答（stderr 为 pydantic literal_error 噪声）。"
+        "同一条消息单独发有时可存活，组合发稳定复现。第三方库域，项目侧无干净的桥内缓解；"
+        "建议升级 mcp 或宿主侧超时重启。"
+    ),
+    strict=False,
+)
 def test_r2_mcp_malformed_requests_may_wedge_session():
-    _scenario([
-        b'{"jsonrpc":"2.0","id":1,"method":"no/such"}\n',
-        b'{"jsonrpc":"2.0","id":2,"method":"tools/call","params":null}\n',
-        b'{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":123}}\n',
-        b'{"jsonrpc":"2.0","method":"ping","id":1.5}\n',
-        b'{"jsonrpc":"2.0","method":"ping","id":{"a":1}}\n',
-        b'{"jsonrpc":"2.0","method":"ping","id":[1]}\n',
-        b'{"jsonrpc":"2.0","method":"ping","id":true}\n',
-        b'{"jsonrpc":"2.0","id":4}\n',
-    ], expect_alive=True)
+    _scenario(
+        [
+            b'{"jsonrpc":"2.0","id":1,"method":"no/such"}\n',
+            b'{"jsonrpc":"2.0","id":2,"method":"tools/call","params":null}\n',
+            b'{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":123}}\n',
+            b'{"jsonrpc":"2.0","method":"ping","id":1.5}\n',
+            b'{"jsonrpc":"2.0","method":"ping","id":{"a":1}}\n',
+            b'{"jsonrpc":"2.0","method":"ping","id":[1]}\n',
+            b'{"jsonrpc":"2.0","method":"ping","id":true}\n',
+            b'{"jsonrpc":"2.0","id":4}\n',
+        ],
+        expect_alive=True,
+    )
 
 
 def test_r2_mcp_five_concurrent_bridges():

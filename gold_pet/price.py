@@ -365,9 +365,7 @@ class PriceService:
     def save_cache(self, snap: Snapshot) -> None:
         try:
             # R2-M-05：原子写，PriceWorker 写盘期间 CLI/主线程读缓存不会看到半截 JSON
-            _atomic_write_text(
-                self.cache_path, json.dumps(snap.to_dict(), ensure_ascii=False)
-            )
+            _atomic_write_text(self.cache_path, json.dumps(snap.to_dict(), ensure_ascii=False))
         except OSError:
             pass
 

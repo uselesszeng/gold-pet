@@ -843,9 +843,7 @@ class PetWindow(QWidget):
         self.bubble.setText(render_line_html(pick_fatty_line(self.fatty_count)))
         self._speak_timer.start(4000)
         self._play_state("shy", 2500)  # 恼怒害羞的表情最贴切
-        logging.getLogger("gold_pet").info(
-            "触发大肥鱼彩蛋（连续第 %d 次）", self.fatty_count
-        )
+        logging.getLogger("gold_pet").info("触发大肥鱼彩蛋（连续第 %d 次）", self.fatty_count)
 
     def _play_state(self, state: str, ms: int) -> None:
         self._set_state(state)
@@ -974,7 +972,9 @@ class PetWindow(QWidget):
     def create_shortcuts(self) -> None:
         """一键创建桌面 + 开始菜单快捷方式，并给用户明确反馈。"""
         icon = asset_dir() / "icon.ico"
-        results = shortcut.create_many(["desktop", "startmenu"], icon=icon if icon.exists() else None)
+        results = shortcut.create_many(
+            ["desktop", "startmenu"], icon=icon if icon.exists() else None
+        )
         made = [name for name, ok in results.items() if ok]
         if made:
             labels = {"desktop": "桌面", "startmenu": "开始菜单"}
@@ -1194,7 +1194,9 @@ class SettingsDialog(QDialog):
         self.extreme_step_spin.setSingleStep(0.1)
         self.extreme_step_spin.setDecimals(1)
         self.extreme_step_spin.setSuffix(" %")
-        self.extreme_step_spin.setToolTip("新价位比上次提醒时再高出这么多才算「创新高」；0 表示任何新高都提醒")
+        self.extreme_step_spin.setToolTip(
+            "新价位比上次提醒时再高出这么多才算「创新高」；0 表示任何新高都提醒"
+        )
         self.extreme_step_spin.setValue(float(cfg.get("alert_extreme_step_pct", 0.1)))
 
         # 到价提醒（以元/克为基准，0 = 关闭）
@@ -1320,11 +1322,14 @@ class SettingsDialog(QDialog):
         alert_form.addRow("", self.target_enabled_check)
         alert_form.addRow("", self.extreme_enabled_check)
         # v0.5.6：把去重语义直接写在界面上，避免用户误以为「价格没动怎么还在弹」
-        alert_form.addRow("", _hint_label(
-            "提醒只在「状态变化」时出现：价格横盘不会重复弹窗。\n"
-            "涨跌幅按阈值分档，跨入更高档位才再提醒一次；\n"
-            "新高新低要严格刷新当日水位才算；到价提醒回到目标价外后重新武装。"
-        ))
+        alert_form.addRow(
+            "",
+            _hint_label(
+                "提醒只在「状态变化」时出现：价格横盘不会重复弹窗。\n"
+                "涨跌幅按阈值分档，跨入更高档位才再提醒一次；\n"
+                "新高新低要严格刷新当日水位才算；到价提醒回到目标价外后重新武装。"
+            ),
+        )
 
         dnd_form = QFormLayout()
         dnd_form.addRow("", self.dnd_check)
@@ -1337,20 +1342,26 @@ class SettingsDialog(QDialog):
         care_form.addRow("", self.drink_check)
         care_form.addRow("", self.posture_check)
         care_form.addRow("", self.eye_check)
-        care_form.addRow("", _hint_label(
-            "到点时鲸娘会用气泡说一句话（约 4 秒后自动消失），\n"
-            "不弹系统通知、不进提醒中心；勿扰时段内不会出声。"
-        ))
+        care_form.addRow(
+            "",
+            _hint_label(
+                "到点时鲸娘会用气泡说一句话（约 4 秒后自动消失），\n"
+                "不弹系统通知、不进提醒中心；勿扰时段内不会出声。"
+            ),
+        )
 
         # v0.8 AI 控制服务：本机 MCP 桥接专用，外部机器无法连接
         control_form = QFormLayout()
         control_form.addRow("", self.control_check)
-        control_form.addRow("", _hint_label(
-            "开启后 AI（如 WorkBuddy / Cursor 的 MCP 工具）可以操控鲸娘：\n"
-            "让她说话、做动作、摸头、挪位置。服务只监听本机 127.0.0.1\n"
-            "随机端口，且需要随机 token 才能访问，外部机器无法连接。\n"
-            "接入信息文件：GoldPet 数据目录下的 control.json（保存后生效）。"
-        ))
+        control_form.addRow(
+            "",
+            _hint_label(
+                "开启后 AI（如 WorkBuddy / Cursor 的 MCP 工具）可以操控鲸娘：\n"
+                "让她说话、做动作、摸头、挪位置。服务只监听本机 127.0.0.1\n"
+                "随机端口，且需要随机 token 才能访问，外部机器无法连接。\n"
+                "接入信息文件：GoldPet 数据目录下的 control.json（保存后生效）。"
+            ),
+        )
 
         ok = QPushButton("保存")
         cancel = QPushButton("取消")

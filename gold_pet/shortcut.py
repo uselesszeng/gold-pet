@@ -197,7 +197,9 @@ def _create_lnk(lnk_path: Path, target: Path, args: str, icon: Path | None) -> b
 
         # IPersistFile::Save (vtable index 6)
         pf_vtable = ctypes.cast(persist, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
-        save_proto = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, wintypes.LPCWSTR, ctypes.c_int)
+        save_proto = ctypes.WINFUNCTYPE(
+            ctypes.c_long, ctypes.c_void_p, wintypes.LPCWSTR, ctypes.c_int
+        )
         save = save_proto(pf_vtable[6])
 
         lnk_path.parent.mkdir(parents=True, exist_ok=True)
@@ -217,9 +219,7 @@ def _create_lnk(lnk_path: Path, target: Path, args: str, icon: Path | None) -> b
                     release_vtable = ctypes.cast(
                         ptr, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
                     ).contents
-                    release = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(
-                        release_vtable[2]
-                    )
+                    release = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(release_vtable[2])
                     release(ptr)
                 except Exception:
                     pass

@@ -673,8 +673,9 @@ def test_create_shortcuts_reports_result_in_bubble(app, tmp_path, monkeypatch):
 
     created = {}
     monkeypatch.setattr(
-        ui_mod.shortcut, "create_many", lambda wheres, icon=None: {"desktop": True,
-                                                                   "startmenu": True}
+        ui_mod.shortcut,
+        "create_many",
+        lambda wheres, icon=None: {"desktop": True, "startmenu": True},
     )
     monkeypatch.setattr(ui_mod.shortcut, "is_supported", lambda: True)
     w = _window(app, tmp_path)
@@ -689,8 +690,9 @@ def test_create_shortcuts_failure_gives_friendly_message(app, tmp_path, monkeypa
     import gold_pet.ui as ui_mod
 
     monkeypatch.setattr(
-        ui_mod.shortcut, "create_many", lambda wheres, icon=None: {"desktop": False,
-                                                                   "startmenu": False}
+        ui_mod.shortcut,
+        "create_many",
+        lambda wheres, icon=None: {"desktop": False, "startmenu": False},
     )
     monkeypatch.setattr(ui_mod.shortcut, "is_supported", lambda: True)
     w = _window(app, tmp_path)
@@ -751,6 +753,7 @@ def test_settings_dialog_saves_shortcut_state(app, tmp_path, monkeypatch):
 def test_long_press_without_move_triggers_shy(app, tmp_path):
     from PySide6.QtCore import QEvent, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
+
     w = _window(app, tmp_path)
     w.mousePressEvent(
         QMouseEvent(
@@ -821,7 +824,9 @@ def test_fatty_lines_have_three_tiers_of_six():
     pools = [set(FATTY_LINES[t]) for t in (1, 2, 3)]
     for pool in pools:
         assert len(pool) >= 6, "每层至少 6 条"
-    assert not (pools[0] & pools[1] or pools[1] & pools[2] or pools[0] & pools[2]), "层间台词不应重复"
+    assert not (
+        pools[0] & pools[1] or pools[1] & pools[2] or pools[0] & pools[2]
+    ), "层间台词不应重复"
 
 
 def test_tease_fatty_progresses_and_pat_resets(app, tmp_path):

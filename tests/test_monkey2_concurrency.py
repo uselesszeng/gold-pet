@@ -55,6 +55,7 @@ def test_r2_historystore_threaded_append_no_lost_updates(tmp_path):
     price_mod.time.time = fake_time
     errors: list[str] = []
     try:
+
         def worker(tid: int) -> None:
             try:
                 for _ in range(40):
@@ -119,13 +120,14 @@ def test_r2_historystore_reader_never_sees_torn_file(tmp_path):
     assert reads["n"] > 0
 
 
-
 def test_r2_price_cache_concurrent_write_read(tmp_path):
     """4 写 4 读并发 250 轮：load_cache 恒不炸、内容恒完整（要么旧要么新快照）。"""
     svc = PriceService(tmp_path / "last.json")
 
     def snap(price: float) -> Snapshot:
-        q = Quote(code="gds_AUTD", name="x", price=price, prev_close=price - 1, high=price, low=price - 2)
+        q = Quote(
+            code="gds_AUTD", name="x", price=price, prev_close=price - 1, high=price, low=price - 2
+        )
         return Snapshot(quotes={"gold|cny_g": q}, fx=7.1, updated_at=time.time(), ok=True)
 
     errors: list[str] = []
@@ -168,8 +170,17 @@ def test_r2_notifier_record_file_consistent_under_threads(tmp_path):
     def worker(tid: int) -> None:
         try:
             for i in range(100):
-                n.record([Alert(kind="pct", side="up", title="t", body=f"b{tid}-{i}",
-                                at=1700000000.0 + tid * 100 + i)])
+                n.record(
+                    [
+                        Alert(
+                            kind="pct",
+                            side="up",
+                            title="t",
+                            body=f"b{tid}-{i}",
+                            at=1700000000.0 + tid * 100 + i,
+                        )
+                    ]
+                )
                 try:
                     text = (tmp_path / "ah.json").read_text(encoding="utf-8")
                 except OSError:
@@ -215,7 +226,9 @@ def test_r2_control_server_threaded_endpoints():
                 for _ in range(80):
                     r = s.post("/say", json={"text": f"t{tid} " + "x" * rnd.randint(1, 50)})
                     assert r.status_code == 200
-                    r = s.post("/move", json={"dx": rnd.randint(-100, 100), "dy": rnd.randint(-100, 100)})
+                    r = s.post(
+                        "/move", json={"dx": rnd.randint(-100, 100), "dy": rnd.randint(-100, 100)}
+                    )
                     assert r.status_code == 200
                     r = s.post("/play", json={"state": "idle"})
                     assert r.status_code == 200

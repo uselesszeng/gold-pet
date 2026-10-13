@@ -83,9 +83,9 @@ def test_r2_notifier_state_machine_random_interleave(tmp_path):
             # oracle：内存与文件逐步一致、上限恒成立
             if hp.exists():
                 on_disk = json.loads(hp.read_text(encoding="utf-8"))
-                assert on_disk == [a.to_dict() for a in n._history], (
-                    f"trial{trial} step{step} 内存/文件不一致"
-                )
+                assert on_disk == [
+                    a.to_dict() for a in n._history
+                ], f"trial{trial} step{step} 内存/文件不一致"
                 assert_valid_json_text(hp.read_text(encoding="utf-8"))
             assert len(n._history) <= MAX_HISTORY
 

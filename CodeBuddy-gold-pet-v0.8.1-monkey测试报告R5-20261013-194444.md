@@ -1,7 +1,7 @@
-# gold-pet v0.8.0 Monkey 测试报告 R5（CodeBuddy，2026-10-13 第五轮）
+# gold-pet v0.8.1 Monkey 测试报告 R5（CodeBuddy，2026-10-13 第五轮）
 
 执行人：CodeBuddy（资深测试工程师角色）
-项目：gold-pet v0.8.0（Python 3.11 + PySide6，容器路径 `/workspace`）
+项目：gold-pet v0.8.1（本轮修复后）（Python 3.11 + PySide6，容器路径 `/workspace`）
 入场基线：`QT_QPA_PLATFORM=offscreen pytest tests` → **396 passed / 2 failed / 10 skipped**
 （2 例红为 `test_monkey3_fault_fs.py::test_r3_fs_readonly_target[history|alerts]`，
 下文定性为**前轮测试资产的平台假设错误**，非产品缺陷）

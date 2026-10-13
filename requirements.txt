@@ -1,5 +1,8 @@
 PySide6>=6.6
 Pillow>=10.0
-# MCP 桥接进程（tools/pet_mcp_server.py）依赖；桌宠本体不依赖
-"mcp<2"
+# MCP 桥接进程（tools/pet_mcp_server.py）依赖；桌宠本体不依赖。
+# 注意：pip 的 requirements 文件不支持给整个依赖规格加引号
+# （`"mcp<2"` 会被当成包名的一部分，报 Invalid requirement），
+# 带比较运算符的规格直接裸写即可。
+mcp<2
 httpx

@@ -1,4 +1,4 @@
-# gold-pet v0.8.0 修复记录 R5（CodeBuddy，2026-10-13）
+# gold-pet v0.8.1 修复记录 R5（CodeBuddy，2026-10-13）
 
 分支 `codebuddy/monkey-r5-review-r5`，基线 `e660d9d`（main）。
 本文档记录第 5 轮（Monkey 段 + 评审段）的**全部源码改动**，每项含「问题回顾 / 修复方案 /

@@ -43,6 +43,10 @@
 - **P2 CI 门禁失效**（`.cnb.yml` 相关）：`ruff format --check` 在改动前就有 38 个文件
   不达标（**该门禁从未通过过**）、`mypy` 必红（`price.py:241`）、且 `ruff>=0.6`
   未固定版本导致门禁结论随装包时刻漂移。修复后**四条门禁首次全绿**。
+- **P1 `requirements.txt` 引号导致 pip 解析失败**：第 4 行写成 `"mcp<2"`，pip 把引号
+  当成包名的一部分 → `Invalid requirement`，`install deps` 阶段直接失败，
+  `lint` / `type check` / `test` **全部被 skipped**。也就是说主干 CI
+  **从来没有真正验证过任何代码**。去掉引号，说明改写为注释行。
 
 ### 变更
 

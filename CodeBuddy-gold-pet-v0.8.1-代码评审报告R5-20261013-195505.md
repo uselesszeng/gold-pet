@@ -1,8 +1,8 @@
-# gold-pet v0.8.0 代码评审报告 R5（CodeBuddy，2026-10-13）
+# gold-pet v0.8.1 代码评审报告 R5（CodeBuddy，2026-10-13）
 
 评审人：CodeBuddy（资深代码评审角色）
 评审对象：分支 `codebuddy/monkey-r5-review-r5`，基线 `e660d9d`（main）
-配套产物：`CodeBuddy-gold-pet-v0.8.0-monkey测试报告R5-*.md`、`tests/test_review5_goldpet.py`（29 例）
+配套产物：`CodeBuddy-gold-pet-v0.8.1-monkey测试报告R5-*.md`、`tests/test_review5_goldpet.py`（29 例）
 种子：20261102（与 monkey 段 20261101 及历史各轮不重复）
 
 ---

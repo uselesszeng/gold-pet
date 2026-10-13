@@ -162,8 +162,7 @@ def test_monkey_cli_dirty_data_files(cli_paths, capsys):
         ("history_path", b'{"x": {"deep": [1, 2]}, "y": 42, "gold|cny_g": []}'),
         (
             "alert_history_path",
-            b'[1, "x", null, {"at": NaN}, '
-            b'{"at": 1e30, "title": "t", "body": "b"}, {"at": "123"}]',
+            b'[1, "x", null, {"at": NaN}, {"at": 1e30, "title": "t", "body": "b"}, {"at": "123"}]',
         ),
         ("alert_history_path", b'{"not": "a list"}'),
         ("alert_history_path", b"\xef\xbb\xbf[]"),

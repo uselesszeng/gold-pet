@@ -230,15 +230,22 @@ def _f(values: list, idx: int, default: float = 0.0) -> float:
     return value if math.isfinite(value) else default
 
 
-def _num(value: object, default: float = 0.0, low: float | None = None,
-         high: float | None = None) -> float:
+def _num(
+    value: object, default: float = 0.0, low: float | None = None, high: float | None = None
+) -> float:
     """M-07：任意脏值 -> 有限 float；转换失败或超出 [low, high] 回落 default。
 
     R2-M-01：float(10**400)（JSON 超长整数字面量）抛 OverflowError 而非 ValueError，
     必须一并接住，否则脏缓存会让 Snapshot.from_dict 炸穿 load_cache。
+
+    R5-R-01：显式标注 `# type: ignore[arg-type]` —— 本函数的契约就是「接受任意
+    脏值」（object），而 float() 的静态签名只接受 SupportsFloat 等，CI 的 `mypy`
+    阶段因此报 1 个 error（`pyproject.toml` 的 `warn_unused_ignores = false`
+    正是为这类必要 ignore 留的位置）。加 ignore 而非改签名，是为了不削弱
+    「入参是任意脏值」这一契约，也不动既有用例锚定的容错语义。
     """
     try:
-        result = float(value)
+        result = float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError, OverflowError):
         return default
     if not math.isfinite(result):

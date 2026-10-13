@@ -60,7 +60,7 @@ def _to_coord(value: Any) -> int | None:
     在 handler 线程里未捕获会导致连接被直接断开、客户端收不到任何 JSON 响应，
     因此必须在转换前拒绝非有限值。bool 是 int 子类，同样拒绝（true 不是坐标）。
     """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     if isinstance(value, float) and not math.isfinite(value):
         return None

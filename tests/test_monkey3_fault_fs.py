@@ -192,7 +192,7 @@ def test_r3_fs_readonly_target(tmp_path, monkeypatch, kind):
         assert after == before, "Windows 上只读目标的写失败路径破坏了原数据"
     else:
         # POSIX：写入正常生效（这不是缺陷，是文件系统语义）
-        assert isinstance(after, (dict, list))
+        assert isinstance(after, dict | list)
     assert _no_tmp_leftovers(tmp_path) == []
     _assert_ok_file(kind, tmp_path)
 

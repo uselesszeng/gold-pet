@@ -3,6 +3,12 @@ line-length = 100
 target-version = "py311"
 exclude = ["build", "dist", ".venv", "mobile"]
 
+# R5-R-02：本仓的 ruff.format 门禁**当前不通过**（38 个文件需重排，改动前即如此），
+# 原因是历史上一直只跑 `ruff check`（不查排版），代码排版依赖手写习惯。
+# 由于 .cnb.yml 里 `ruff format --check .` 是硬门禁，这里显式把 formatter 的
+# 目标风格钉死在当前配置上，避免换 ruff 版本后门禁结果漂移。
+# 残留的 38 个文件待一笔**纯格式提交**统一重排（不动逻辑），见 R5 评审报告。
+
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
 ignore = ["E501"]

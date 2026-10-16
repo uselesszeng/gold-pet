@@ -27,11 +27,11 @@ from PIL import Image, ImageSequence
 
 # gold-pet 状态 -> dsh GIF 文件名
 STATE_MAP: dict[str, str] = {
-    "idle": "idle",        # 待机 → 轻微摇摆
-    "up": "jumping",       # 上涨 → 张手跳跃
-    "down": "failed",      # 下跌 → 低头沮丧
-    "pat": "waving",       # 摸头 → 开心挥手
-    "shy": "waiting",      # 害羞 → 双手合十卖萌
+    "idle": "idle",  # 待机 → 轻微摇摆
+    "up": "jumping",  # 上涨 → 张手跳跃
+    "down": "failed",  # 下跌 → 低头沮丧
+    "pat": "waving",  # 摸头 → 开心挥手
+    "shy": "waiting",  # 害羞 → 双手合十卖萌
     "loading": "running",  # 刷新 → 跑动
     "offline": "waiting",  # 断网 → 期待等待
 }

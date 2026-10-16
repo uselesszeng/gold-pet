@@ -46,8 +46,16 @@ NET_ERRORS = (
 
 
 def _good_snapshot() -> Snapshot:
-    q = Quote(code="gds_AUTD", name="黄金延期", price=897.15, prev_close=900.37,
-              high=902.0, low=889.24, unit="元/克", currency="CNY")
+    q = Quote(
+        code="gds_AUTD",
+        name="黄金延期",
+        price=897.15,
+        prev_close=900.37,
+        high=902.0,
+        low=889.24,
+        unit="元/克",
+        currency="CNY",
+    )
     return Snapshot(quotes={"gold|cny_g": q}, fx=6.7, updated_at=1790000000.0, ok=True, error="")
 
 
@@ -56,14 +64,18 @@ def _window(tmp_path, cfg=None, asset_root=None, monkeypatch=None):
     from PySide6.QtWidgets import QApplication
 
     from gold_pet import ui as ui_mod
+
     if asset_root is not None:
         monkeypatch.setattr(ui_mod, "asset_dir", lambda: asset_root)
     QApplication.instance() or QApplication([])
     cfg = cfg or Config()
     cfg.set("control_enabled", False)
     w = ui_mod.PetWindow(
-        cfg, PriceService(tmp_path / "last.json"), HistoryStore(tmp_path / "history.json"),
-        auto_refresh=False, notifier_history_path=tmp_path / "alert_history.json",
+        cfg,
+        PriceService(tmp_path / "last.json"),
+        HistoryStore(tmp_path / "history.json"),
+        auto_refresh=False,
+        notifier_history_path=tmp_path / "alert_history.json",
     )
     return w
 
@@ -126,8 +138,21 @@ def test_r3_degraded_config_random_key_subsets():
     """500 次随机残缺配置（键全缺/随机子集/None/脏值）：sanitize 后值域恒合法。"""
     rnd = random.Random(SEED)
     keys = list(DEFAULTS)
-    dirty = [None, [], {}, "", "NaN", float("nan"), float("inf"), True, -10**9,
-             10**400, "abc", [1], {"a": 1}]
+    dirty = [
+        None,
+        [],
+        {},
+        "",
+        "NaN",
+        float("nan"),
+        float("inf"),
+        True,
+        -(10**9),
+        10**400,
+        "abc",
+        [1],
+        {"a": 1},
+    ]
     for _ in range(ITERATIONS):
         subset = rnd.sample(keys, rnd.randint(0, len(keys)))
         data = {}
@@ -150,10 +175,21 @@ def test_r3_degraded_config_random_key_subsets():
         assert d["pos"] is None or (isinstance(d["pos"], list) and len(d["pos"]) == 2)
         assert isinstance(d["target_high"], float) and d["target_high"] >= 0.0
         assert isinstance(d["target_low"], float) and d["target_low"] >= 0.0
-        for bk in ("always_on_top", "show_bubble", "show_spark", "autostart",
-                   "alert_pct_enabled", "alert_target_enabled", "alert_extreme_enabled",
-                   "dnd_enabled", "tray_show_price", "control_enabled",
-                   "care_drink_enabled", "care_posture_enabled", "care_eye_enabled"):
+        for bk in (
+            "always_on_top",
+            "show_bubble",
+            "show_spark",
+            "autostart",
+            "alert_pct_enabled",
+            "alert_target_enabled",
+            "alert_extreme_enabled",
+            "dnd_enabled",
+            "tray_show_price",
+            "control_enabled",
+            "care_drink_enabled",
+            "care_posture_enabled",
+            "care_eye_enabled",
+        ):
             assert isinstance(d[bk], bool)
         for ck in ("care_drink_interval_min", "care_posture_interval_min", "care_eye_interval_min"):
             assert d[ck] in (30, 45, 60, 90, 120)
@@ -167,6 +203,7 @@ def test_r3_degraded_no_network_pipeline(tmp_path, monkeypatch):
     svc.save_cache(_good_snapshot())
 
     for exc in NET_ERRORS:
+
         def boom(timeout=8.0, exc=exc):
             raise exc
 
@@ -203,8 +240,11 @@ def test_r3_degraded_no_network_pipeline(tmp_path, monkeypatch):
     from gold_pet import main as main_mod
 
     monkeypatch.setattr(main_mod, "app_dir", lambda: tmp_path)
-    monkeypatch.setattr(price_mod, "fetch_raw",
-                        lambda timeout=8.0: (_ for _ in ()).throw(urllib.error.URLError("down")))
+    monkeypatch.setattr(
+        price_mod,
+        "fetch_raw",
+        lambda timeout=8.0: (_ for _ in ()).throw(urllib.error.URLError("down")),
+    )
     args = main_mod.parse_args(["--once"])
     assert main_mod.run_once(args, Config()) == 1
 
@@ -236,8 +276,14 @@ def test_r3_degraded_logging_unwritable(tmp_path):
     )
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
-    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                          timeout=60, env=env, cwd=str(PROJECT_ROOT))
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env,
+        cwd=str(PROJECT_ROOT),
+    )
     assert proc.returncode == 0, proc.stderr[-800:]
     assert "degraded-ok" in proc.stdout
 

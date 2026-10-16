@@ -43,13 +43,36 @@ BASE = 1_790_000_000.0  # 2026-09 附近的固定基准
 DAY = 86400.0
 YEAR = 365 * DAY
 
-JUMPS = [0.0, DAY, -DAY, YEAR, -YEAR, 2 * 3600, -2 * 3600, 30 * DAY, -30 * DAY,
-         59.0, -59.0, 61.0, -61.0, 6 * 3600, -6 * 3600]
+JUMPS = [
+    0.0,
+    DAY,
+    -DAY,
+    YEAR,
+    -YEAR,
+    2 * 3600,
+    -2 * 3600,
+    30 * DAY,
+    -30 * DAY,
+    59.0,
+    -59.0,
+    61.0,
+    -61.0,
+    6 * 3600,
+    -6 * 3600,
+]
 
 
 def _quote(price: float = 900.0, prev: float = 890.0) -> Quote:
-    return Quote(code="x", name="黄金", price=price, prev_close=prev,
-                 high=price, low=price, unit="元/克", currency="CNY")
+    return Quote(
+        code="x",
+        name="黄金",
+        price=price,
+        prev_close=prev,
+        high=price,
+        low=price,
+        unit="元/克",
+        currency="CNY",
+    )
 
 
 class _Clock:
@@ -174,8 +197,7 @@ def test_r3_clock_dnd_across_midnight(clock):
 def test_r3_clock_filter_series_cutoffs(clock):
     """1h / today / all 在 ±1 天、±1 年跳变下的 cutoff 与结果一致。"""
     for now in (BASE, BASE + DAY, BASE - DAY, BASE + YEAR, BASE - YEAR):
-        s = [{"t": now - 7200, "p": 1.0}, {"t": now - 60, "p": 2.0},
-             {"t": now + 60, "p": 3.0}]
+        s = [{"t": now - 7200, "p": 1.0}, {"t": now - 60, "p": 2.0}, {"t": now + 60, "p": 3.0}]
         got_1h = filter_series(s, "1h", now=now)
         assert got_1h == [2.0, 3.0]
         got_all = filter_series(s, "all", now=now)

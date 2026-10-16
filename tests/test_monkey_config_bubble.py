@@ -13,7 +13,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 项目根入 sys.path（同 test_main.py 惯例）
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)  # 项目根入 sys.path（同 test_main.py 惯例）
 
 import json
 import random
@@ -58,10 +60,7 @@ def _dirty_settings(rnd: random.Random) -> bytes | str | dict:
         return rnd.choice([b"", b"{", b"null", b"[1,2]", b'"str"', b"not json at all"])
     if roll < 0.7:
         # 键存在但类型/值脏：NaN、超大数、嵌套结构、垃圾时间
-        return {
-            key: pick_number(rnd)
-            for key in rnd.sample(list(DEFAULTS), k=rnd.randint(1, 8))
-        }
+        return {key: pick_number(rnd) for key in rnd.sample(list(DEFAULTS), k=rnd.randint(1, 8))}
     if roll < 0.8:
         return dirty_value(rnd, max_depth=6)
     # 20%：合法边界值
@@ -118,7 +117,8 @@ def test_monkey_config_load_sanitize(tmp_path):
             text = d[key]
             assert isinstance(text, str) and len(text) == 5 and text[2] == ":"
         assert d["pos"] is None or (
-            isinstance(d["pos"], list) and len(d["pos"]) == 2
+            isinstance(d["pos"], list)
+            and len(d["pos"]) == 2
             and all(isinstance(v, int) and not isinstance(v, bool) for v in d["pos"])
         )
         for key in ("target_high", "target_low"):

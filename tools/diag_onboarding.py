@@ -35,9 +35,11 @@ def main() -> int:
             app.processEvents()
         path = OUT / f"onboarding_{name}.png"
         dlg.grab().save(str(path))
-        print(f"{name:<10} 尺寸 {dlg.width()}×{dlg.height()}  默认勾选: "
-              f"桌面={dlg.wants_desktop()} 开始菜单={dlg.wants_startmenu()} "
-              f"自启={dlg.wants_autostart()}  → {path.name}")
+        print(
+            f"{name:<10} 尺寸 {dlg.width()}×{dlg.height()}  默认勾选: "
+            f"桌面={dlg.wants_desktop()} 开始菜单={dlg.wants_startmenu()} "
+            f"自启={dlg.wants_autostart()}  → {path.name}"
+        )
         dlg.close()
 
     print(f"\n截图目录：{OUT}")

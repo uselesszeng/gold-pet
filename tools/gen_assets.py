@@ -141,8 +141,9 @@ def draw_tail_fin(d, sway: int = 0):
     d.chord(s(bx + 36, by + 8, bx + 50, by + 28), -90, 90, fill=FIN_DEEP)
     # 7) 高亮描边：深色桌面上没有它，尾鳍会与壁纸融为一体
     for cy, ry in ((by - 16, 13), (by + 15, 13)):
-        d.chord(s(bx + 14, cy - ry, bx + 46, cy + ry), -90, 90, outline=FIN_EDGE,
-                width=int(1.0 * P))
+        d.chord(
+            s(bx + 14, cy - ry, bx + 46, cy + ry), -90, 90, outline=FIN_EDGE, width=int(1.0 * P)
+        )
 
 
 def draw_ear_fins(d, tilt: int = 0):
@@ -276,8 +277,12 @@ def draw_crown(d):
     # 三尖（真三角形）
     for cx, h, hw in ((67, 13, 8), (81, 19, 9), (95, 13, 8)):
         d.polygon(s(cx - hw, 20, cx, 20 - h, cx + hw, 20), fill=CROWN)
-        d.line(s(cx - hw, 20, cx, 20 - h, cx + hw, 20), fill=CROWN_EDGE, width=int(1.5 * P),
-               joint="curve")
+        d.line(
+            s(cx - hw, 20, cx, 20 - h, cx + hw, 20),
+            fill=CROWN_EDGE,
+            width=int(1.5 * P),
+            joint="curve",
+        )
     # 冠体底带
     d.rounded_rectangle(
         s(58, 19, 104, 30), radius=int(2 * P), fill=CROWN, outline=CROWN_EDGE, width=int(1.7 * P)
@@ -296,8 +301,9 @@ def draw_crown(d):
 
 def draw_head(d):
     """头部（椭圆，非正圆，略宽以显 Q 感）。"""
-    d.ellipse(s(HEAD_CX - HEAD_R, HEAD_CY - HEAD_R + 2, HEAD_CX + HEAD_R, HEAD_CY + HEAD_R + 2),
-              fill=SKIN)
+    d.ellipse(
+        s(HEAD_CX - HEAD_R, HEAD_CY - HEAD_R + 2, HEAD_CX + HEAD_R, HEAD_CY + HEAD_R + 2), fill=SKIN
+    )
     # 下巴阴影
     d.chord(s(64, 82, 96, 98), 0, 180, fill=SKIN_SHADE)
 

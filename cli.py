@@ -91,9 +91,10 @@ def _pid_alive(pid: int) -> bool:
             return False
         try:
             exit_code = ctypes.c_ulong()
-            return bool(
-                kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
-            ) and exit_code.value == STILL_ACTIVE
+            return (
+                bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)))
+                and exit_code.value == STILL_ACTIVE
+            )
         finally:
             kernel32.CloseHandle(handle)
     import os
@@ -147,9 +148,7 @@ def _request(method: str, path: str, payload: dict | None = None) -> dict:
     port, token = _discover()
     url = f"http://127.0.0.1:{port}{path}"  # 地址硬编码回环，绝不指向其它主机
     body = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(
-        url, data=body if method == "POST" else None, method=method
-    )
+    req = urllib.request.Request(url, data=body if method == "POST" else None, method=method)
     req.add_header("X-GP-Token", token)
     if method == "POST":
         req.add_header("Content-Type", "application/json; charset=utf-8")
@@ -263,7 +262,9 @@ def cmd_say(args) -> dict:
     elif mood:
         resp = _request("POST", "/say", {"mood": mood})
     else:
-        raise CliError("需要非空的 text（自由发言）或 --mood（台词组）。", EXIT_VALIDATE, "validation")
+        raise CliError(
+            "需要非空的 text（自由发言）或 --mood（台词组）。", EXIT_VALIDATE, "validation"
+        )
     return {"mode": resp.get("mode", "text"), "length": len(text) if text else None}
 
 
@@ -292,7 +293,9 @@ def cmd_move(args) -> dict:
     elif args.x is not None and args.y is not None:
         payload = {"x": args.x, "y": args.y}
     else:
-        raise CliError("需要 --dx/--dy（相对挪动）或 --x/--y（绝对坐标）。", EXIT_VALIDATE, "validation")
+        raise CliError(
+            "需要 --dx/--dy（相对挪动）或 --x/--y（绝对坐标）。", EXIT_VALIDATE, "validation"
+        )
     _request("POST", "/move", payload)
     return payload
 
@@ -349,7 +352,9 @@ def cmd_history(args) -> dict:
         metal = args.metal or cfg.get("metal", "gold")
         unit = args.unit or cfg.get("unit", "cny_g")
         if metal not in METAL_NAMES:
-            raise CliError(f"metal 必须是 {'/'.join(METAL_NAMES)} 之一。", EXIT_VALIDATE, "validation")
+            raise CliError(
+                f"metal 必须是 {'/'.join(METAL_NAMES)} 之一。", EXIT_VALIDATE, "validation"
+            )
         if unit not in price_mod.METALS[metal]["sources"]:
             raise CliError(
                 f"{METAL_NAMES[metal]}支持的 unit：{'/'.join(price_mod.METALS[metal]['sources'])}。",
@@ -378,9 +383,7 @@ def cmd_alerts(args) -> dict:
         raise CliError("--limit 必须是不小于 1 的整数。", EXIT_VALIDATE, "validation")
     limit = args.limit or 20
     if args.kind and args.kind not in ALERT_KINDS:
-        raise CliError(
-            f"--kind 必须是 {'/'.join(ALERT_KINDS)} 之一。", EXIT_VALIDATE, "validation"
-        )
+        raise CliError(f"--kind 必须是 {'/'.join(ALERT_KINDS)} 之一。", EXIT_VALIDATE, "validation")
     raw = _load_json(alert_history_path(), missing_ok=True)
     items = raw if isinstance(raw, list) else []
     if args.kind:
@@ -399,7 +402,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "示例：\n"
             "  python cli.py status --json\n"
-            "  python cli.py say \"主人好呀\"\n"
+            '  python cli.py say "主人好呀"\n'
             "  python cli.py history --limit 30 --metal gold --unit cny_g\n"
             "注：--json 必须放在子命令之前；控制服务仅在本机 127.0.0.1 可达。"
         ),
@@ -412,7 +415,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # 让 --json 也能写在子命令之后：SUPPRESS 缺省避免子解析器把全局值覆盖回 False
     _common = argparse.ArgumentParser(add_help=False)
-    _common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    _common.add_argument(
+        "--json", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS
+    )
     sub = parser.add_subparsers(dest="command", metavar="<command>", required=True)
 
     p = sub.add_parser(
@@ -420,7 +425,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=cmd_status)
 
-    p = sub.add_parser("say", parents=[_common], help="让鲸娘说话（CLI 侧先做与服务端同源的限长校验）")
+    p = sub.add_parser(
+        "say", parents=[_common], help="让鲸娘说话（CLI 侧先做与服务端同源的限长校验）"
+    )
     p.add_argument("text", nargs="?", default="", help="自由发言文本（≤500 字，超长截断）")
     p.add_argument(
         "--mood",
@@ -470,7 +477,9 @@ def build_parser() -> argparse.ArgumentParser:
         parents=[_common],
         help="读取提醒历史（本地 alert_history.json 只读；无增删端点，不做写操作）",
     )
-    p.add_argument("--limit", type=int, default=None, help="最多返回 N 条（默认 20，按时间正序取末尾）")
+    p.add_argument(
+        "--limit", type=int, default=None, help="最多返回 N 条（默认 20，按时间正序取末尾）"
+    )
     p.add_argument("--kind", help="pct/target/extreme 之一")
     p.set_defaults(func=cmd_alerts)
 
@@ -573,8 +582,11 @@ def main(argv: list[str] | None = None) -> int:
         return emit(
             False,
             args.command,
-            {"code": "runtime", "message": f"内部错误：{type(exc).__name__}: {exc}",
-             "exit_code": EXIT_RUNTIME},
+            {
+                "code": "runtime",
+                "message": f"内部错误：{type(exc).__name__}: {exc}",
+                "exit_code": EXIT_RUNTIME,
+            },
         )
     return emit(True, args.command, data)
 

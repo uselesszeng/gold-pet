@@ -14,7 +14,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 项目根入 sys.path（同 test_main.py 惯例）
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)  # 项目根入 sys.path（同 test_main.py 惯例）
 
 import json
 import random
@@ -68,17 +70,21 @@ def _random_series(rnd: random.Random) -> list:
     out = []
     for _ in range(n):
         if rnd.random() < 0.8:
-            out.append(rnd.choice([
-                None,
-                pick_number(rnd),
-                "not-a-point",
-                {"t": pick_number(rnd)},
-                {"p": pick_number(rnd)},
-                {"t": pick_number(rnd), "p": pick_number(rnd)},
-                {"t": float("nan"), "p": 1.0},
-                {"t": 1.0, "p": float("inf")},
-                [1, 2, 3],
-            ]))
+            out.append(
+                rnd.choice(
+                    [
+                        None,
+                        pick_number(rnd),
+                        "not-a-point",
+                        {"t": pick_number(rnd)},
+                        {"p": pick_number(rnd)},
+                        {"t": pick_number(rnd), "p": pick_number(rnd)},
+                        {"t": float("nan"), "p": 1.0},
+                        {"t": 1.0, "p": float("inf")},
+                        [1, 2, 3],
+                    ]
+                )
+            )
         else:
             out.append({"t": time.time() - rnd.random() * 86400, "p": rnd.uniform(1, 1000)})
     return out
@@ -112,8 +118,9 @@ def test_monkey_history_load_random_files(hist_path):
         elif roll < 0.8:
             payload = dirty_value(rnd, max_depth=5)
         else:
-            payload = {f"metal{i % 5}|unit{i % 2}": _random_series(rnd)
-                       for _ in range(rnd.randint(1, 4))}
+            payload = {
+                f"metal{i % 5}|unit{i % 2}": _random_series(rnd) for _ in range(rnd.randint(1, 4))
+            }
 
         _write(hist_path, payload)
 
@@ -139,16 +146,29 @@ def test_monkey_history_append_dirty_prices(hist_path):
     """500 次脏价格 append：状态文件永远保持合法 JSON，序列内全是有限点。"""
     rnd = random.Random(SEED + 1)
     store = HistoryStore(hist_path, max_points=rnd.choice([10, 100, 1440]))
-    keys = [("gold", "cny_g"), ("silver", "usd_oz"), ("", "\x00"), ("键🐳", "NaN"), ("a" * 200, "b")]
+    keys = [
+        ("gold", "cny_g"),
+        ("silver", "usd_oz"),
+        ("", "\x00"),
+        ("键🐳", "NaN"),
+        ("a" * 200, "b"),
+    ]
 
     for _ in range(ITERATIONS):
         metal, unit = rnd.choice(keys)
         if rnd.random() < 0.8:
-            price = rnd.choice([
-                float("nan"), float("inf"), float("-inf"),
-                10**308, -(10**308), -1.0, 0.0,
-                rnd.uniform(-1e6, 1e6),
-            ])
+            price = rnd.choice(
+                [
+                    float("nan"),
+                    float("inf"),
+                    float("-inf"),
+                    10**308,
+                    -(10**308),
+                    -1.0,
+                    0.0,
+                    rnd.uniform(-1e6, 1e6),
+                ]
+            )
         else:
             price = rnd.uniform(100, 1000)
 

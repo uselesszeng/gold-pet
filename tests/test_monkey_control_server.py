@@ -13,7 +13,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 项目根入 sys.path（同 test_main.py 惯例）
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)  # 项目根入 sys.path（同 test_main.py 惯例）
 
 import json
 import math
@@ -69,8 +71,9 @@ def _assert_json_response(resp: httpx.Response) -> dict:
     return data
 
 
-def _post(base: str, path: str, *, content: bytes | None = None, json_body=None,
-          token: str = TOKEN) -> httpx.Response:
+def _post(
+    base: str, path: str, *, content: bytes | None = None, json_body=None, token: str = TOKEN
+) -> httpx.Response:
     """json_body 走 allow_nan=True + ensure_ascii=True 手工编码：httpx 自带的 json=
     拒绝 inf/NaN，而 NaN 字面量与孤代理对正是要灌给服务端的脏 payload
     （服务端必须回 JSON 而不是断连）。"""
@@ -78,8 +81,9 @@ def _post(base: str, path: str, *, content: bytes | None = None, json_body=None,
     if json_body is not None:
         content = json.dumps(json_body, ensure_ascii=True, allow_nan=True).encode("utf-8")
     headers["Content-Type"] = "application/json; charset=utf-8"
-    return httpx.post(f"{base}{path}", content=content or b"", headers=headers,
-                      timeout=REQUEST_TIMEOUT)
+    return httpx.post(
+        f"{base}{path}", content=content or b"", headers=headers, timeout=REQUEST_TIMEOUT
+    )
 
 
 def _post_oversize_tolerant(base: str, path: str, content: bytes) -> bool:
@@ -101,8 +105,7 @@ def _post_oversize_tolerant(base: str, path: str, content: bytes) -> bool:
 
 def _assert_server_alive(base: str) -> None:
     """413 断连之后服务必须仍然可用。"""
-    resp = httpx.get(f"{base}/status", headers={"X-GP-Token": TOKEN},
-                     timeout=REQUEST_TIMEOUT)
+    resp = httpx.get(f"{base}/status", headers={"X-GP-Token": TOKEN}, timeout=REQUEST_TIMEOUT)
     assert resp.status_code == 200
 
 
@@ -120,15 +123,19 @@ def test_monkey_endpoints_dirty_payloads(pet_server):
             # 80% 非法：整体非对象 / 字段脏值 / 未知字段；
             # 20% 合法边界：带全部期望字段但取边界值
             if rnd.random() < 0.8:
-                body = dirty_value(rnd) if rnd.random() < 0.5 else {
-                    "text": pick_number(rnd),
-                    "mood": pick_number(rnd),
-                    "state": pick_number(rnd),
-                    "dx": pick_number(rnd),
-                    "dy": pick_number(rnd),
-                    "x": pick_number(rnd),
-                    "y": pick_number(rnd),
-                }
+                body = (
+                    dirty_value(rnd)
+                    if rnd.random() < 0.5
+                    else {
+                        "text": pick_number(rnd),
+                        "mood": pick_number(rnd),
+                        "state": pick_number(rnd),
+                        "dx": pick_number(rnd),
+                        "dy": pick_number(rnd),
+                        "x": pick_number(rnd),
+                        "y": pick_number(rnd),
+                    }
+                )
             else:
                 body = {
                     "text": pick_text(rnd),
@@ -221,8 +228,11 @@ def test_monkey_heavy_payloads(pet_server):
     _assert_json_response(resp)
 
     # 贴限超长文本（~60KB 体内，UTF-8 直编避免 \\u 转义膨胀）：200 OK，动作文本截断到 500
-    resp = _post(base, "/say",
-                 content=json.dumps({"text": "鲸" * 20_000}, ensure_ascii=False).encode("utf-8"))
+    resp = _post(
+        base,
+        "/say",
+        content=json.dumps({"text": "鲸" * 20_000}, ensure_ascii=False).encode("utf-8"),
+    )
     assert resp.status_code == 200
     assert len(actions[-1]["text"]) == 500
 
@@ -243,8 +253,9 @@ def test_monkey_heavy_payloads(pet_server):
         _assert_json_response(resp)
 
     # GET /status 带超长 query 与脏 token
-    resp = httpx.get(f"{base}/status?{'q' * 10000}=1", headers={"X-GP-Token": TOKEN},
-                     timeout=REQUEST_TIMEOUT)
+    resp = httpx.get(
+        f"{base}/status?{'q' * 10000}=1", headers={"X-GP-Token": TOKEN}, timeout=REQUEST_TIMEOUT
+    )
     assert resp.status_code == 200
     resp = httpx.get(f"{base}/status", timeout=REQUEST_TIMEOUT)
     assert resp.status_code == 401

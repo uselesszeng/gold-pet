@@ -13,7 +13,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # 项目根入 sys.path（同 test_main.py 惯例）
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)  # 项目根入 sys.path（同 test_main.py 惯例）
 
 import math
 import random
@@ -34,20 +36,24 @@ def _random_series(rnd: random.Random) -> list:
     out = []
     for _ in range(n):
         if rnd.random() < 0.8:
-            out.append(rnd.choice([
-                None,
-                42,
-                "point",
-                [],
-                {},
-                {"t": pick_number(rnd), "p": pick_number(rnd)},
-                {"p": pick_number(rnd)},
-                {"t": float("nan"), "p": 5.0},
-                {"t": 1.0, "p": float("nan")},
-                {"t": "abc", "p": "def"},
-                {"t": 1e308, "p": -1e308},
-                dirty_value(rnd),
-            ]))
+            out.append(
+                rnd.choice(
+                    [
+                        None,
+                        42,
+                        "point",
+                        [],
+                        {},
+                        {"t": pick_number(rnd), "p": pick_number(rnd)},
+                        {"p": pick_number(rnd)},
+                        {"t": float("nan"), "p": 5.0},
+                        {"t": 1.0, "p": float("nan")},
+                        {"t": "abc", "p": "def"},
+                        {"t": 1e308, "p": -1e308},
+                        dirty_value(rnd),
+                    ]
+                )
+            )
         else:
             out.append({"t": time.time() - rnd.random() * 7200, "p": rnd.uniform(1, 1000)})
     return out
@@ -75,13 +81,21 @@ def test_monkey_alert_from_dict():
         if rnd.random() < 0.8:
             data = dirty_value(rnd, max_depth=2)
             if not isinstance(data, dict):
-                data = {"kind": data, "side": data, "title": data, "body": data,
-                        "at": pick_number(rnd)}
+                data = {
+                    "kind": data,
+                    "side": data,
+                    "title": data,
+                    "body": data,
+                    "at": pick_number(rnd),
+                }
         else:
-            data = {"kind": rnd.choice(["pct", "target", "extreme", ""]),
-                    "side": rnd.choice(["up", "down", "high", "low", ""]),
-                    "title": pick_text(rnd), "body": pick_text(rnd),
-                    "at": time.time() + rnd.uniform(-1e6, 1e6)}
+            data = {
+                "kind": rnd.choice(["pct", "target", "extreme", ""]),
+                "side": rnd.choice(["up", "down", "high", "low", ""]),
+                "title": pick_text(rnd),
+                "body": pick_text(rnd),
+                "at": time.time() + rnd.uniform(-1e6, 1e6),
+            }
         alert = Alert.from_dict(data)  # 抛任何异常即失败
         assert isinstance(alert, Alert)
         assert isinstance(alert.at, float)
@@ -90,8 +104,26 @@ def test_monkey_alert_from_dict():
 
 def test_monkey_in_quiet_hours():
     rnd = random.Random(SEED + 2)
-    times = ["00:00", "23:59", "08:00", "12:34", "", "25:00", "12:60", "nan", "ab:cd",
-             "7:5", " 08:00 ", "0800", None, 480, ["08:00"], "08:00:00", "🐳:🐳", "\x00:00"]
+    times = [
+        "00:00",
+        "23:59",
+        "08:00",
+        "12:34",
+        "",
+        "25:00",
+        "12:60",
+        "nan",
+        "ab:cd",
+        "7:5",
+        " 08:00 ",
+        "0800",
+        None,
+        480,
+        ["08:00"],
+        "08:00:00",
+        "🐳:🐳",
+        "\x00:00",
+    ]
     for _ in range(ITERATIONS):
         start = rnd.choice(times)
         end = rnd.choice(times)
@@ -121,8 +153,15 @@ def test_monkey_notifier_evaluate_with_dirty_config(tmp_path):
         base = price * rnd.uniform(0.9, 1.1)
         high = price * rnd.choice([1.0, 1.001, 0.999])
         low = price * rnd.choice([1.0, 0.999, 1.001])
-        quote = Quote(code="t", name="n", price=price, prev_close=base,
-                      high=max(high, low), low=min(high, low), unit="元/克")
+        quote = Quote(
+            code="t",
+            name="n",
+            price=price,
+            prev_close=base,
+            high=max(high, low),
+            low=min(high, low),
+            unit="元/克",
+        )
         alerts = notifier.evaluate(quote, now=time.time() + i * 3600)
         assert isinstance(alerts, list)
         for a in alerts:

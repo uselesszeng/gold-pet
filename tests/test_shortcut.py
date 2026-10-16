@@ -179,7 +179,9 @@ def test_created_lnk_points_to_target(fake_dirs):
 
         vt = ctypes.cast(ptr, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
         qi = ctypes.WINFUNCTYPE(
-            ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(shortcut._GUID),
+            ctypes.c_long,
+            ctypes.c_void_p,
+            ctypes.POINTER(shortcut._GUID),
             ctypes.POINTER(ctypes.c_void_p),
         )(vt[0])
         iid_pf = shortcut._guid_from_string(shortcut._IID_IPersistFile)
@@ -187,29 +189,31 @@ def test_created_lnk_points_to_target(fake_dirs):
         assert qi(ptr, ctypes.byref(iid_pf), ctypes.byref(pf)) == 0
 
         pvt = ctypes.cast(pf, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
-        load = ctypes.WINFUNCTYPE(
-            ctypes.c_long, ctypes.c_void_p, wintypes.LPCWSTR, ctypes.c_int
-        )(pvt[5])
+        load = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, wintypes.LPCWSTR, ctypes.c_int)(
+            pvt[5]
+        )
         assert load(pf, str(lnk), 0) == 0, "加载 .lnk 失败"
 
         buf = ctypes.create_unicode_buffer(1024)
         getpath = ctypes.WINFUNCTYPE(
-            ctypes.c_long, ctypes.c_void_p, wintypes.LPWSTR, ctypes.c_int,
-            ctypes.c_void_p, ctypes.c_uint,
+            ctypes.c_long,
+            ctypes.c_void_p,
+            wintypes.LPWSTR,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_uint,
         )(vt[3])
         getpath(ptr, buf, 1024, None, 0)
 
         expected = shortcut._target_path()
         assert expected is not None
-        assert Path(buf.value).resolve() == expected, (
-            f".lnk 指向 {buf.value}，应为 {expected}"
-        )
+        assert Path(buf.value).resolve() == expected, f".lnk 指向 {buf.value}，应为 {expected}"
 
         # 描述也要写上，鼠标悬停时才不是空白
         dbuf = ctypes.create_unicode_buffer(1024)
-        getdesc = ctypes.WINFUNCTYPE(
-            ctypes.c_long, ctypes.c_void_p, wintypes.LPWSTR, ctypes.c_int
-        )(vt[6])
+        getdesc = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, wintypes.LPWSTR, ctypes.c_int)(
+            vt[6]
+        )
         getdesc(ptr, dbuf, 1024)
         assert dbuf.value == shortcut.DESCRIPTION
     finally:
@@ -237,27 +241,30 @@ def test_created_lnk_has_icon(fake_dirs, tmp_path):
         clsid = shortcut._guid_from_string(shortcut._CLSID_ShellLink)
         iid = shortcut._guid_from_string(shortcut._IID_IShellLinkW)
         ptr = ctypes.c_void_p()
-        ole32.CoCreateInstance(
-            ctypes.byref(clsid), None, 1, ctypes.byref(iid), ctypes.byref(ptr)
-        )
+        ole32.CoCreateInstance(ctypes.byref(clsid), None, 1, ctypes.byref(iid), ctypes.byref(ptr))
         vt = ctypes.cast(ptr, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
         qi = ctypes.WINFUNCTYPE(
-            ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(shortcut._GUID),
+            ctypes.c_long,
+            ctypes.c_void_p,
+            ctypes.POINTER(shortcut._GUID),
             ctypes.POINTER(ctypes.c_void_p),
         )(vt[0])
         iid_pf = shortcut._guid_from_string(shortcut._IID_IPersistFile)
         pf = ctypes.c_void_p()
         qi(ptr, ctypes.byref(iid_pf), ctypes.byref(pf))
         pvt = ctypes.cast(pf, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
-        load = ctypes.WINFUNCTYPE(
-            ctypes.c_long, ctypes.c_void_p, wintypes.LPCWSTR, ctypes.c_int
-        )(pvt[5])
+        load = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, wintypes.LPCWSTR, ctypes.c_int)(
+            pvt[5]
+        )
         load(pf, str(desktop / shortcut.LINK_NAME), 0)
 
         ibuf = ctypes.create_unicode_buffer(1024)
         iidx = ctypes.c_int()
         geticon = ctypes.WINFUNCTYPE(
-            ctypes.c_long, ctypes.c_void_p, wintypes.LPWSTR, ctypes.c_int,
+            ctypes.c_long,
+            ctypes.c_void_p,
+            wintypes.LPWSTR,
+            ctypes.c_int,
             ctypes.POINTER(ctypes.c_int),
         )(vt[16])
         geticon(ptr, ibuf, 1024, ctypes.byref(iidx))

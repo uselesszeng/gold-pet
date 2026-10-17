@@ -110,6 +110,11 @@ class Alert:
 
     @classmethod
     def from_dict(cls, data: dict) -> Alert:
+        # R5-M-03：工厂函数的输入形态必须自己守——AttributeError 不在任何既有
+        # 容错白名单里（常见口径是 TypeError/ValueError/OSError/RecursionError），
+        # 一旦调用方没先做 isinstance 过滤就会穿透整个收敛链路。
+        if not isinstance(data, dict):
+            raise TypeError(f"Alert.from_dict 需要 dict，收到 {type(data).__name__}")
         return cls(
             kind=data.get("kind", ""),
             side=data.get("side", ""),
@@ -221,8 +226,18 @@ class Notifier:
         return max(0, int(self.cfg.get("alert_cooldown_sec", 600)))
 
     def _roll_day(self, now: float) -> None:
-        """跨日时清空当日水位：新的一天重新计「今日新高」。"""
-        day = time.strftime("%Y-%m-%d", time.localtime(now))
+        """跨日时清空当日水位：新的一天重新计「今日新高」。
+
+        R5-M-02：now 来自外部（注入时钟、脚本、被系统调成极端值的时钟），
+        time.localtime 对超出 time_t 范围的浮点抛 OSError（不是 ValueError），
+        不接住会从 evaluate() 一路逃逸、崩穿刷新链路。格式化失败时退回
+        「不跨日」语义（保留当前 _day、不清水位），宁可少重置一次也不炸。
+        """
+        try:
+            day = time.strftime("%Y-%m-%d", time.localtime(now))
+        except (OSError, ValueError, OverflowError):
+            logger.debug("notifier: 时间戳 %r 无法格式化，本次不做跨日重置", now)
+            return
         if day != self._day:
             self._day = day
             self._extreme_water.clear()

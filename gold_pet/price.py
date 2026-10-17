@@ -21,6 +21,7 @@ import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("gold_pet")
 
@@ -237,9 +238,14 @@ def _num(
 
     R2-M-01：float(10**400)（JSON 超长整数字面量）抛 OverflowError 而非 ValueError，
     必须一并接住，否则脏缓存会让 Snapshot.from_dict 炸穿 load_cache。
+
+    R5-04：入参声明为 object 是**有意的**（脏值来自被手改的 JSON），而 float() 的
+    类型存根只收 str/Buffer/SupportsFloat/SupportsIndex——在调用点局部收窄为 Any
+    表达「这里就是要吃任意东西，转换失败由 except 兜住」，不改任何运行期行为。
     """
+    raw: Any = value
     try:
-        result = float(value)  # type: ignore[arg-type]
+        result = float(raw)
     except (TypeError, ValueError, OverflowError):
         return default
     if not math.isfinite(result):

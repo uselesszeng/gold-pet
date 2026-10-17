@@ -19,10 +19,8 @@ import errno
 import json
 import os
 import random
-import shutil
 import stat
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -78,22 +76,6 @@ def _assert_ok_file(kind: str, tmp: Path) -> None:
     target = _target_of(kind, tmp)
     if target.exists():
         assert_valid_json_text(target.read_text(encoding="utf-8"))
-
-
-def _write_bypasses_mode() -> bool:
-    """当前用户写入时是否无视文件权限位（POSIX root 如此，Windows 不受影响）。"""
-    if os.name != "posix":
-        return False
-    probe = Path(tempfile.mkdtemp()) / "probe.txt"
-    probe.write_text("x", encoding="utf-8")
-    os.chmod(probe, stat.S_IREAD)
-    try:
-        probe.write_text("y", encoding="utf-8")
-        return True
-    except OSError:
-        return False
-    finally:
-        shutil.rmtree(probe.parent, ignore_errors=True)
 
 
 class _Fault:
@@ -175,23 +157,67 @@ def test_r3_fs_atomic_write_faults_do_not_escape(tmp_path, monkeypatch, kind, mo
 
 @pytest.mark.parametrize("kind", WRITER_NAMES)
 def test_r3_fs_readonly_target(tmp_path, monkeypatch, kind):
-    """目标文件只读（Windows chmod S_IREAD）时写入器不得抛，原内容保留。
+    """目标文件不可写时写入器不得抛，原内容字节不变。
 
-    R4：Linux 上以 root 跑（容器 / CI）时，root 无视文件权限位，
-    chmod 只读根本拦不住写入——这不是被测代码的问题，本用例在该环境下无意义。
+    R5-M-01：原实现把「只读」做成 os.chmod(target, S_IREAD)，但本仓写入器走的是
+    「写 .tmp + os.replace」，而 POSIX 的 rename(2) **只要求目录可写、不检查目标
+    文件自身的权限位** —— 在 Linux 上只读的目标照样被原子替换，断言必然失败
+    （Windows 上 MoveFileEx 会返回 ACCESS_DENIED，所以该用例只在 Windows 成立）。
+    CI 与开发都在 Linux，等于一条永远红的门禁。
+
+    这里改成在两种平台上都真实成立的「目标不可写」注入：让 os.replace 抛
+    PermissionError（Windows 上目标被占用/只读时的等价表现），语义与被替代的
+    用例完全一致 —— 写入必须被吞掉、原内容一个字节都不变、不留 .tmp。
+    settings.json 是直写路径（无 tmp/replace 阶段），故障落在目标 write_text 上。
     """
-    if _write_bypasses_mode():
-        pytest.skip("root 无视只读权限位，POSIX 侧无法构造只读目标")
+    write = _make_writer(kind, tmp_path)
+    target = _target_of(kind, tmp_path)
+    write()  # 先写一次合法内容
+    before = target.read_bytes()
+
+    if kind == "settings":
+        real_write = Path.write_text
+
+        def deny_write(self, *a, **k):
+            if self == target:
+                raise PermissionError(errno.EACCES, "目标文件只读/被占用")
+            return real_write(self, *a, **k)
+
+        monkeypatch.setattr(Path, "write_text", deny_write)
+    else:
+        real_replace = os.replace
+
+        def deny_replace(src, dst):
+            if Path(dst) == target:
+                raise PermissionError(errno.EACCES, "目标文件只读/被占用")
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", deny_replace)
+
+    write()  # 不得抛
+    assert target.read_bytes() == before, f"{kind}: 故障写破坏了原数据"
+    assert _no_tmp_leftovers(tmp_path) == []
+    _assert_ok_file(kind, tmp_path)
+
+
+@pytest.mark.parametrize("kind", WRITER_NAMES)
+def test_r3_fs_readonly_target_windows_semantics(tmp_path, monkeypatch, kind):
+    """保留原用例在 Windows 上的语义（chmod S_IREAD），仅在 Windows 跑。
+
+    Linux 上 rename(2) 无视文件权限位，该前提不成立 —— 见上一个用例的说明。
+    """
+    if os.name != "nt":
+        pytest.skip("POSIX 的 rename(2) 不检查目标文件权限位，该前提仅 Windows 成立")
     write = _make_writer(kind, tmp_path)
     target = _target_of(kind, tmp_path)
     write()
-    before = target.read_text(encoding="utf-8")
+    before = target.read_bytes()
     os.chmod(target, stat.S_IREAD)
     try:
         write()
     finally:
         os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
-    assert target.read_text(encoding="utf-8") == before
+    assert target.read_bytes() == before
     assert _no_tmp_leftovers(tmp_path) == []
     _assert_ok_file(kind, tmp_path)
 

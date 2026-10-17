@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .paths import app_dir, asset_dir, settings_path  # noqa: F401
+from .price import _atomic_write_text
 
 logger = logging.getLogger("gold_pet")
 
@@ -218,13 +219,16 @@ class Config:
         磁盘满/只读/文件被占时配置保存属最佳努力，绝不能让一次写盘失败
         炸穿 UI 槽——quit_app 里的 save 抛 OSError 会让 QApplication.quit()
         永不执行（托盘退出/关窗退不掉）。
+
+        R5-M-01：落盘必须原子。裸 write_text 是 truncate→写入，中间存在
+        「文件为 0 字节或半截 JSON」的窗口——并发的 CLI/同步盘/杀软读到会
+        JSONDecodeError，窗口内进程被杀则配置永久留在截断态、用户自定义项
+        静默蒸发。改用与其余三个写入器同源的 _atomic_write_text（tmp + os.replace）。
         """
         path = getattr(self, "_path", None) or settings_path()
         try:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-            Path(path).write_text(
-                json.dumps(self._data, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            _atomic_write_text(Path(path), json.dumps(self._data, ensure_ascii=False, indent=2))
         except OSError:
             logger.warning("settings: 配置保存失败（%s），本次改动不落盘", path, exc_info=True)
 

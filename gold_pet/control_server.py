@@ -35,6 +35,7 @@ from PySide6.QtCore import QThread, Signal
 
 from . import __version__
 from .paths import control_info_path
+from .price import _atomic_write_text
 
 logger = logging.getLogger("gold_pet")
 
@@ -322,7 +323,8 @@ class ControlServer(QThread):
         }
         path = control_info_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+        # R5-M-01：与 settings.json 同治——原子写，避免截断窗口被 CLI/MCP 桥读到
+        _atomic_write_text(path, json.dumps(info, ensure_ascii=False, indent=2))
 
     @staticmethod
     def _remove_info() -> None:

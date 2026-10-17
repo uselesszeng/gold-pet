@@ -38,7 +38,9 @@ def main() -> int:
     print(f"  窗口 x,y,w,h      = {g.x()}, {g.y()}, {g.width()}, {g.height()}")
     print(f"  visible           = {win.isVisible()}")
     print(f"  sizeHint          = {win.sizeHint().width()} x {win.sizeHint().height()}")
-    print(f"  minimumSizeHint   = {win.minimumSizeHint().width()} x {win.minimumSizeHint().height()}")
+    print(
+        f"  minimumSizeHint   = {win.minimumSizeHint().width()} x {win.minimumSizeHint().height()}"
+    )
 
     print()
     print("=" * 58)

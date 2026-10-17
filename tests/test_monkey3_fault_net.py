@@ -95,7 +95,9 @@ class _Handler(BaseHTTPRequestHandler):
 def sina(tmp_path, monkeypatch):
     """起本机行情服务并把 price.SINA_URL 指过去；返回 (base_url, cache_path)。"""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
+    )
     thread.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
     monkeypatch.setattr(price_mod, "SINA_URL", base + "/ok")
@@ -110,8 +112,21 @@ def _point_at(monkeypatch, sina, path: str) -> None:
 
 
 # ------------------------------------------------------------------ 定向矩阵
-@pytest.mark.parametrize("path", ["/ok", "/partial", "/nofinite", "/nanmix", "/err500",
-                                  "/garbage", "/empty", "/megabody", "/redirect", "/reset"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/ok",
+        "/partial",
+        "/nofinite",
+        "/nanmix",
+        "/err500",
+        "/garbage",
+        "/empty",
+        "/megabody",
+        "/redirect",
+        "/reset",
+    ],
+)
 def test_r3_net_fetch_matrix(sina, monkeypatch, path):
     """10 种上游行为：fetch 永不抛、结构合法、写盘严格 JSON、失败不覆盖好缓存。"""
     _point_at(monkeypatch, sina, path)
@@ -212,8 +227,13 @@ def _window(tmp_path, interval: int = 15):
     cfg = Config()
     cfg.set("control_enabled", False)  # 测试不写真实 %APPDATA%，不遗留 QThread
     cfg.set("interval_sec", interval)
-    w = PetWindow(cfg, PriceService(tmp_path / "last.json"), HistoryStore(tmp_path / "history.json"),
-                  auto_refresh=False, notifier_history_path=tmp_path / "alert_history.json")
+    w = PetWindow(
+        cfg,
+        PriceService(tmp_path / "last.json"),
+        HistoryStore(tmp_path / "history.json"),
+        auto_refresh=False,
+        notifier_history_path=tmp_path / "alert_history.json",
+    )
     return app, w
 
 
@@ -230,9 +250,20 @@ def test_r3_net_worker_backoff_chain(tmp_path):
         from gold_pet.price import Quote
 
         good = Snapshot(
-            quotes={"gold|cny_g": Quote(code="x", name="黄金", price=900.0, prev_close=899.0,
-                                       high=901.0, low=898.0, unit="元/克")},
-            fx=6.7, ok=True, error="",
+            quotes={
+                "gold|cny_g": Quote(
+                    code="x",
+                    name="黄金",
+                    price=900.0,
+                    prev_close=899.0,
+                    high=901.0,
+                    low=898.0,
+                    unit="元/克",
+                )
+            },
+            fx=6.7,
+            ok=True,
+            error="",
         )
         w._retry_timer.stop()  # 模拟 refresh() 入口行为，再走成功回调
         w._on_snapshot(good)
@@ -290,8 +321,20 @@ def test_r3_net_random_fault_mix(sina, monkeypatch):
     """500 次随机上游行为/超时组合：无异常逃逸、返回值结构合法、≤3s。"""
     rnd = random.Random(SEED)
     base, cache = sina
-    paths = ["/ok", "/partial", "/nofinite", "/nanmix", "/err500", "/garbage",
-             "/empty", "/redirect", "/megabody", "/404", "/ok", "/ok"]
+    paths = [
+        "/ok",
+        "/partial",
+        "/nofinite",
+        "/nanmix",
+        "/err500",
+        "/garbage",
+        "/empty",
+        "/redirect",
+        "/megabody",
+        "/404",
+        "/ok",
+        "/ok",
+    ]
     svc = PriceService(cache)
     for i in range(ITERATIONS):
         path = rnd.choice(paths)

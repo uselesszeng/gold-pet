@@ -74,9 +74,15 @@ def test_r3_thread_start_failure_degrades(tmp_path, monkeypatch):
     QApplication.instance() or QApplication([])
     cfg = Config()
     cfg.set("control_enabled", False)
-    w = PetWindow(cfg, PriceService(tmp_path / "l.json"), HistoryStore(tmp_path / "h.json"),
-                  auto_refresh=False, notifier_history_path=tmp_path / "a.json")
+    w = PetWindow(
+        cfg,
+        PriceService(tmp_path / "l.json"),
+        HistoryStore(tmp_path / "h.json"),
+        auto_refresh=False,
+        notifier_history_path=tmp_path / "a.json",
+    )
     try:
+
         def bad_start(self):
             raise RuntimeError("cannot create thread")
 
@@ -138,6 +144,7 @@ def test_r3_thread_stop_lifecycle_matrix(tmp_path, monkeypatch):
     # 1) 未启动直接 stop
     ctl = cs.ControlServer(state_reader=lambda: {})
     assert _run_with_watchdog(ctl.stop, 5.0)
+
     # 2) 绑定失败后 stop（两次）——用局部 context，别 undo 掉 control_info_path 的隔离
     def bad_build(*a, **k):
         raise OSError(1, "bind failed")
@@ -166,10 +173,17 @@ def test_r3_thread_start_failure_during_window_construction(tmp_path, monkeypatc
     from gold_pet.ui import PetWindow
 
     QApplication.instance() or QApplication([])
-    monkeypatch.setattr(cs.ControlServer, "start", lambda self: (_ for _ in ()).throw(RuntimeError("no thread")))
+    monkeypatch.setattr(
+        cs.ControlServer, "start", lambda self: (_ for _ in ()).throw(RuntimeError("no thread"))
+    )
     cfg = Config()  # control_enabled 默认 True → 构造路径直接踩故障
-    w = PetWindow(cfg, PriceService(tmp_path / "l.json"), HistoryStore(tmp_path / "h.json"),
-                  auto_refresh=False, notifier_history_path=tmp_path / "a.json")
+    w = PetWindow(
+        cfg,
+        PriceService(tmp_path / "l.json"),
+        HistoryStore(tmp_path / "h.json"),
+        auto_refresh=False,
+        notifier_history_path=tmp_path / "a.json",
+    )
     try:
         assert w.control is None
         assert w.isWidgetType()
@@ -189,9 +203,15 @@ def test_r3_thread_worker_dies_midway_recovers(tmp_path):
     QApplication.instance() or QApplication([])
     cfg = Config()
     cfg.set("control_enabled", False)
-    w = PetWindow(cfg, PriceService(tmp_path / "l.json"), HistoryStore(tmp_path / "h.json"),
-                  auto_refresh=False, notifier_history_path=tmp_path / "a.json")
+    w = PetWindow(
+        cfg,
+        PriceService(tmp_path / "l.json"),
+        HistoryStore(tmp_path / "h.json"),
+        auto_refresh=False,
+        notifier_history_path=tmp_path / "a.json",
+    )
     try:
+
         class _DyingService:
             def fetch(self, timeout=8.0):
                 raise RuntimeError("worker dies mid-way")
@@ -268,7 +288,9 @@ def test_r3_thread_half_closed_server_cli(cli_paths, capsys):
     """服务被关闭（发现文件仍在、pid 存活）→ CLI exit 4 + 结构化 JSON。"""
     server = cs.build_server(("127.0.0.1", 0), "tok", lambda: {"state": "idle"})
     port = server.server_address[1]
-    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
+    )
     thread.start()
     server.shutdown()
     server.server_close()  # 端口已关，发现文件残留
@@ -291,7 +313,7 @@ def test_r3_thread_mid_response_close_cli(cli_paths, capsys):
     def accept_then_truncate():
         try:
             conn, _ = s.accept()
-            conn.sendall(b"HTTP/1.0 200 OK\r\nContent-Length: 999\r\n\r\n{\"ok\":")
+            conn.sendall(b'HTTP/1.0 200 OK\r\nContent-Length: 999\r\n\r\n{"ok":')
             conn.close()
         except OSError:
             pass
@@ -309,8 +331,9 @@ def test_r3_thread_mid_response_close_cli(cli_paths, capsys):
 def test_r3_thread_401_structured_cli(cli_paths, capsys):
     """服务在线但 token 不匹配（桌宠重启残留）→ exit 4，文案可读。"""
     server = cs.build_server(("127.0.0.1", 0), "real-token", lambda: {"state": "idle"})
-    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05},
-                              daemon=True)
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
+    )
     thread.start()
     try:
         _write_control_json(cli_paths["control_info_path"], server.server_address[1], "stale-token")

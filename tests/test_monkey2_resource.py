@@ -76,8 +76,7 @@ def test_r2_notifier_record_longrun_cap(tmp_path):
     """1000 条 record：200 上限、文件 ≤256KB、每步合法。"""
     n = Notifier(Config({}), history_path=tmp_path / "ah.json", max_history=200)
     for i in range(1000):
-        n.record([Alert(kind="pct", side="up", title="t", body=f"b{i}",
-                        at=1700000000.0 + i * 0.1)])
+        n.record([Alert(kind="pct", side="up", title="t", body=f"b{i}", at=1700000000.0 + i * 0.1)])
         assert len(n._history) <= 200
     on_disk = json.loads((tmp_path / "ah.json").read_text(encoding="utf-8"))
     assert len(on_disk) == 200

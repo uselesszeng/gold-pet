@@ -35,6 +35,7 @@ from PySide6.QtCore import QThread, Signal
 
 from . import __version__
 from .paths import control_info_path
+from .price import _atomic_write_text
 
 logger = logging.getLogger("gold_pet")
 
@@ -165,16 +166,16 @@ def _make_handler():
                 mood = data.get("mood")
                 if isinstance(text, str) and text.strip():
                     # P2-01：限长，防超长文本撑爆气泡（HTML 转义在渲染层统一做）
-                    self.server.dispatch(
-                        {"action": "say", "text": text.strip()[:_MAX_SAY_CHARS]}
-                    )
+                    self.server.dispatch({"action": "say", "text": text.strip()[:_MAX_SAY_CHARS]})
                     self._send_json(200, {"ok": True, "mode": "text"})
                     return
                 if isinstance(mood, str) and mood.strip():
                     self.server.dispatch({"action": "say", "mood": mood.strip()})
                     self._send_json(200, {"ok": True, "mode": "mood"})
                     return
-                self._send_json(400, {"ok": False, "error": "需要 text（自由发言）或 mood（台词组）"})
+                self._send_json(
+                    400, {"ok": False, "error": "需要 text（自由发言）或 mood（台词组）"}
+                )
                 return
 
             if path == "/play":
@@ -195,7 +196,9 @@ def _make_handler():
                 has_rel = dx is not None and dy is not None
                 has_abs = x is not None and y is not None
                 if not (has_rel or has_abs):
-                    self._send_json(400, {"ok": False, "error": "需要 dx/dy（相对挪动）或 x/y（绝对坐标）"})
+                    self._send_json(
+                        400, {"ok": False, "error": "需要 dx/dy（相对挪动）或 x/y（绝对坐标）"}
+                    )
                     return
                 action: dict[str, Any] = {"action": "move"}
                 if has_rel:
@@ -320,7 +323,8 @@ class ControlServer(QThread):
         }
         path = control_info_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+        # R5-M-01：与 settings.json 同治——原子写，避免截断窗口被 CLI/MCP 桥读到
+        _atomic_write_text(path, json.dumps(info, ensure_ascii=False, indent=2))
 
     @staticmethod
     def _remove_info() -> None:

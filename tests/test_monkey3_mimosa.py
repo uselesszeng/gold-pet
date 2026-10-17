@@ -108,8 +108,13 @@ def test_r3_mimosa_h2_speak_random_not_security(tmp_path):
     QApplication.instance() or QApplication([])
     cfg = Config()
     cfg.set("control_enabled", False)
-    w = PetWindow(cfg, PriceService(tmp_path / "l.json"), HistoryStore(tmp_path / "h.json"),
-                  auto_refresh=False, notifier_history_path=tmp_path / "a.json")
+    w = PetWindow(
+        cfg,
+        PriceService(tmp_path / "l.json"),
+        HistoryStore(tmp_path / "h.json"),
+        auto_refresh=False,
+        notifier_history_path=tmp_path / "a.json",
+    )
     try:
         rnd = random.Random(SEED + 1)
         moods = list(LINES) + ["nope", "", "NaN", None]
@@ -139,10 +144,13 @@ def test_r3_mimosa_h3_frames_of_no_privilege_escape(tmp_path, monkeypatch):
     src = tmp_path / "src"
     (src / "sub").mkdir(parents=True)
     for gif_name in set(mod.STATE_MAP.values()):
-        frames = [Image.new("RGBA", (10, 12), (255, 0, 0, 255)),
-                  Image.new("RGBA", (10, 12), (0, 255, 0, 255))]
-        frames[0].save(src / f"{gif_name}.gif", save_all=True,
-                       append_images=frames[1:], duration=100, loop=0)
+        frames = [
+            Image.new("RGBA", (10, 12), (255, 0, 0, 255)),
+            Image.new("RGBA", (10, 12), (0, 255, 0, 255)),
+        ]
+        frames[0].save(
+            src / f"{gif_name}.gif", save_all=True, append_images=frames[1:], duration=100, loop=0
+        )
 
     fake_root = tmp_path / "fake_root"
     pet_dir = fake_root / "assets" / "pet"
@@ -174,8 +182,9 @@ def test_r3_mimosa_h3_frames_of_no_privilege_escape(tmp_path, monkeypatch):
 def test_r3_mimosa_h4_cli_url_loopback_and_whitelist(tmp_path, monkeypatch, capsys):
     """H4 复核：cli.py 的动态 URL 只可能落在 127.0.0.1 + 固定白名单路径 → 未复现。"""
     info = tmp_path / "control.json"
-    info.write_text(json.dumps({"port": 45999, "token": "tok", "pid": os.getpid()}),
-                    encoding="utf-8")
+    info.write_text(
+        json.dumps({"port": 45999, "token": "tok", "pid": os.getpid()}), encoding="utf-8"
+    )
     monkeypatch.setattr(cli_mod, "control_info_path", lambda: info)
     # 本地数据文件也隔离到 tmp，避免读到真实 %APPDATA%
     monkeypatch.setattr(cli_mod, "cache_path", lambda: tmp_path / "last_price.json")
@@ -210,6 +219,7 @@ def test_r3_mimosa_h4_cli_url_loopback_and_whitelist(tmp_path, monkeypatch, caps
 
     # parser 面没有 --host/--url 之类改目标主机的入口
     parser = cli_mod.build_parser()
+
     def walk(p):
         for a in p._actions:
             yield a
@@ -217,6 +227,7 @@ def test_r3_mimosa_h4_cli_url_loopback_and_whitelist(tmp_path, monkeypatch, caps
                 for c in a.choices.values() if isinstance(a.choices, dict) else a.choices:
                     if hasattr(c, "_actions"):
                         yield from walk(c)
+
     dests = {a.dest for a in walk(parser)}
     assert not {d for d in dests if "host" in d or "url" in d or "endpoint" in d}
 
@@ -226,11 +237,13 @@ def test_r3_mimosa_h4_cli_rejects_dirty_ports(capsys, tmp_path, monkeypatch):
     info = tmp_path / "control.json"
     monkeypatch.setattr(cli_mod, "control_info_path", lambda: info)
     called: list[str] = []
-    monkeypatch.setattr(cli_mod.urllib.request, "urlopen",
-                        lambda req, timeout=None: called.append(req.full_url))
+    monkeypatch.setattr(
+        cli_mod.urllib.request, "urlopen", lambda req, timeout=None: called.append(req.full_url)
+    )
     for bad_port in [0, -1, 65536, 99999, True, "80", 3.14, None, [80], {"p": 80}]:
-        info.write_text(json.dumps({"port": bad_port, "token": "t", "pid": os.getpid()}),
-                        encoding="utf-8")
+        info.write_text(
+            json.dumps({"port": bad_port, "token": "t", "pid": os.getpid()}), encoding="utf-8"
+        )
         code = cli_mod.main(["status", "--json"])
         out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
         assert code == 4 and out["ok"] is False
@@ -271,9 +284,18 @@ def test_r3_mimosa_h6_cnb_api_host_pinned(monkeypatch):
 
     monkeypatch.setattr(mod.urllib.request, "urlopen", fake_urlopen)
     adversarial = [
-        "evil.com@attacker.test", "//evil.com", "../../evil", "https://evil.com",
-        "x#frag", "x?q=1", "a b", "..%2f..%2f", "\nHost: evil.test",
-        "api.cnb.cool@evil.test", "\\\\evil.test", "例子.中国",
+        "evil.com@attacker.test",
+        "//evil.com",
+        "../../evil",
+        "https://evil.com",
+        "x#frag",
+        "x?q=1",
+        "a b",
+        "..%2f..%2f",
+        "\nHost: evil.test",
+        "api.cnb.cool@evil.test",
+        "\\\\evil.test",
+        "例子.中国",
     ]
     rnd = random.Random(SEED)
     for slug in adversarial + [f"repo-{rnd.randint(0, 10**6)}" for _ in range(ITERATIONS)]:
@@ -315,8 +337,9 @@ def test_r3_mimosa_h8_mcp_bridge_loopback(tmp_path, monkeypatch):
     pytest.importorskip("mcp")
     mod = _load_tool("pet_mcp_server.py")
     info = tmp_path / "control.json"
-    info.write_text(json.dumps({"port": 45999, "token": "tok", "pid": os.getpid()}),
-                    encoding="utf-8")
+    info.write_text(
+        json.dumps({"port": 45999, "token": "tok", "pid": os.getpid()}), encoding="utf-8"
+    )
     monkeypatch.setattr(mod, "_INFO_PATH", info)
 
     captured: list[str] = []
@@ -346,10 +369,13 @@ def test_r3_mimosa_scan_corpus_matches():
     assert len(findings) == 8
     locations = {(f["location"]["path"], f["location"]["line"]) for f in findings}
     assert locations == {
-        ("gold_pet/ui.py", 258), ("gold_pet/ui.py", 768),
+        ("gold_pet/ui.py", 258),
+        ("gold_pet/ui.py", 768),
         ("tools/import_dsh_assets.py", 103),
-        ("cli.py", 157), ("gold_pet/price.py", 254),
-        ("tools/cnb_release_upload.py", 62), ("tools/cnb_release_upload.py", 86),
+        ("cli.py", 157),
+        ("gold_pet/price.py", 254),
+        ("tools/cnb_release_upload.py", 62),
+        ("tools/cnb_release_upload.py", 86),
         ("tools/pet_mcp_server.py", 82),
     }
     # 扫描状态为 inconclusive（verdictEffect=none）：结论仅作假设输入

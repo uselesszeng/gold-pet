@@ -42,11 +42,24 @@ GOOD_ALERTS = json.dumps(
 )
 GOOD_CACHE = json.dumps(
     {
-        "quotes": {"gold|cny_g": {"code": "x", "name": "黄金", "price": 900.0,
-                                  "prev_close": 899.0, "high": 901.0, "low": 898.0,
-                                  "time_text": "", "unit": "元/克", "currency": "CNY",
-                                  "converted": False}},
-        "fx": 6.7, "updated_at": 1700000000.0, "ok": True, "error": "",
+        "quotes": {
+            "gold|cny_g": {
+                "code": "x",
+                "name": "黄金",
+                "price": 900.0,
+                "prev_close": 899.0,
+                "high": 901.0,
+                "low": 898.0,
+                "time_text": "",
+                "unit": "元/克",
+                "currency": "CNY",
+                "converted": False,
+            }
+        },
+        "fx": 6.7,
+        "updated_at": 1700000000.0,
+        "ok": True,
+        "error": "",
     },
     ensure_ascii=False,
 )
@@ -134,8 +147,14 @@ def _corrupt(text: str, mode: str, rnd: random.Random) -> str:
 
 
 CORRUPTION_MODES = (
-    "truncate", "truncate_utf8", "garbage_tail", "empty", "bom_garbage",
-    "wrong_type", "nan_literal", "deep",
+    "truncate",
+    "truncate_utf8",
+    "garbage_tail",
+    "empty",
+    "bom_garbage",
+    "wrong_type",
+    "nan_literal",
+    "deep",
 )
 
 
@@ -156,7 +175,10 @@ def test_r3_interrupt_half_json_all_loaders(tmp_path, monkeypatch, kind):
             assert result is None or isinstance(result, Snapshot)
         elif kind == "settings":
             assert isinstance(result, Config) and result.get("metal") in (
-                "gold", "silver", "platinum")
+                "gold",
+                "silver",
+                "platinum",
+            )
         elif kind == "control":
             assert result is None or isinstance(result, dict)
         _repair_write(kind, path, monkeypatch)

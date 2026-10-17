@@ -39,7 +39,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .price import Quote, _atomic_write_text, safe_strftime
+from .price import Quote, _atomic_write_text
 
 logger = logging.getLogger("gold_pet")
 
@@ -110,6 +110,11 @@ class Alert:
 
     @classmethod
     def from_dict(cls, data: dict) -> Alert:
+        # R5-M-03：工厂函数的输入形态必须自己守——AttributeError 不在任何既有
+        # 容错白名单里（常见口径是 TypeError/ValueError/OSError/RecursionError），
+        # 一旦调用方没先做 isinstance 过滤就会穿透整个收敛链路。
+        if not isinstance(data, dict):
+            raise TypeError(f"Alert.from_dict 需要 dict，收到 {type(data).__name__}")
         return cls(
             kind=data.get("kind", ""),
             side=data.get("side", ""),
@@ -234,10 +239,18 @@ class Notifier:
     def _roll_day(self, now: float) -> None:
         """跨日时清空当日水位：新的一天重新计「今日新高」。
 
-        R5-BUG-3：now 可能来自注入/损坏的时间源，localtime 会抛 OverflowError；
-        解析不出日期时用占位值（等价于「换了一天」，清空水位是安全方向）。
+        R5-BUG-3 / R5-M-02：now 可能来自注入/损坏的时间源（脚本、被系统改到极端值的
+        时钟），time.localtime 对超出 time_t 范围的浮点抛 OSError / OverflowError
+        （不是 ValueError），不接住会从 evaluate() 一路逃逸、崩穿刷新链路。
+        格式化失败时退回「不跨日」语义（保留当前 _day、不动水位）——坏时间戳下
+        我们并不知道今天是哪天，宁可少重置一次，也不要把脏值当成「新的一天」而
+        重新武装「创新高/新低」提醒造成刷屏。
         """
-        day = safe_strftime("%Y-%m-%d", now, fallback="?")
+        try:
+            day = time.strftime("%Y-%m-%d", time.localtime(now))
+        except (OSError, ValueError, OverflowError):
+            logger.debug("notifier: 时间戳 %r 无法格式化，本次不做跨日重置", now)
+            return
         if day != self._day:
             self._day = day
             self._extreme_water.clear()

@@ -21,6 +21,7 @@ import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("gold_pet")
 
@@ -238,14 +239,16 @@ def _num(
     R2-M-01：float(10**400)（JSON 超长整数字面量）抛 OverflowError 而非 ValueError，
     必须一并接住，否则脏缓存会让 Snapshot.from_dict 炸穿 load_cache。
 
-    R5-R-01：显式标注 `# type: ignore[arg-type]` —— 本函数的契约就是「接受任意
-    脏值」（object），而 float() 的静态签名只接受 SupportsFloat 等，CI 的 `mypy`
-    阶段因此报 1 个 error（`pyproject.toml` 的 `warn_unused_ignores = false`
-    正是为这类必要 ignore 留的位置）。加 ignore 而非改签名，是为了不削弱
-    「入参是任意脏值」这一契约，也不动既有用例锚定的容错语义。
+    R5-R-01 / R5-04：入参声明为 object 是**有意的**（脏值来自被手改的 JSON），
+    而 float() 的类型存根只接受 str / Buffer / SupportsFloat / SupportsIndex，
+    CI 的 `mypy` 阶段因此报 1 个 error（`pyproject.toml` 的 `warn_unused_ignores = false`
+    正是为这类必要 ignore 留的位置）。这里在调用点局部收窄为 Any 并显式标注
+    `# type: ignore[arg-type]`，表达「就是要吃任意东西，转换失败由 except 兜住」，
+    既不动「入参是任意脏值」这一契约，也不改任何运行期行为。
     """
+    raw: Any = value
     try:
-        result = float(value)  # type: ignore[arg-type]
+        result = float(raw)  # type: ignore[arg-type]
     except (TypeError, ValueError, OverflowError):
         return default
     if not math.isfinite(result):

@@ -157,42 +157,67 @@ def test_r3_fs_atomic_write_faults_do_not_escape(tmp_path, monkeypatch, kind, mo
 
 @pytest.mark.parametrize("kind", WRITER_NAMES)
 def test_r3_fs_readonly_target(tmp_path, monkeypatch, kind):
-    """目标文件只读时的写入语义（跨平台口径修正，R5）。
+    """目标文件不可写时写入器不得抛，原内容字节不变。
 
-    ⚠️ 原用例是**平台假设错误**，不是产品缺陷（本仓基线稳定 2 例红的根因）：
-    它假定「chmod S_IREAD 后写入必然失败、文件字节不变」。实际语义是——
+    R5-M-01：原实现把「只读」做成 os.chmod(target, S_IREAD)，但本仓写入器走的是
+    「写 .tmp + os.replace」，而 POSIX 的 rename(2) **只要求目录可写、不检查目标
+    文件自身的权限位** —— 在 Linux 上只读的目标照样被原子替换，断言必然失败
+    （Windows 上 MoveFileEx 会返回 ACCESS_DENIED，所以该用例只在 Windows 成立）。
+    CI 与开发都在 Linux，等于一条永远红的门禁。
 
-      - Windows：目标文件带只读属性时 `os.replace` 以 EACCES 失败，写入被吞
-        （原用例的 `assert after == before` 正是为这条路径写的）；
-      - POSIX：`rename(2)` 看的是**目录**写权限，目标文件自身 0444 不阻止
-        覆盖（实测 chmod 0o400 后 replace 照样成功、内容真的被更新，且新
-        inode 的权限位回落 0644）。
-
-    同时原用例的 `after == before` 是**字节级**比较，而 history / alerts 两次
-    写入各自调用 `time.time()`，纳秒位必然不同——即使在 Windows 上也只在
-    「写入恰好失败」时序下偶然成立。
-
-    因此这里改为按**平台真实语义**断言，两边都验到：
-      - POSIX：写入成功生效，且文件仍是严格合法 JSON、无 tmp 残留；
-      - Windows：写入被容错吞掉，原数据保持不变。
-    「不得抛异常」与「无 tmp 残留」是跨平台共同底线。
+    这里改成在两种平台上都真实成立的「目标不可写」注入：让 os.replace 抛
+    PermissionError（Windows 上目标被占用/只读时的等价表现），语义与被替代的
+    用例完全一致 —— 写入必须被吞掉、原内容一个字节都不变、不留 .tmp。
+    settings.json 是直写路径（无 tmp/replace 阶段），故障落在目标 write_text 上。
     """
     write = _make_writer(kind, tmp_path)
     target = _target_of(kind, tmp_path)
+    write()  # 先写一次合法内容
+    before = target.read_bytes()
+
+    if kind == "settings":
+        real_write = Path.write_text
+
+        def deny_write(self, *a, **k):
+            if self == target:
+                raise PermissionError(errno.EACCES, "目标文件只读/被占用")
+            return real_write(self, *a, **k)
+
+        monkeypatch.setattr(Path, "write_text", deny_write)
+    else:
+        real_replace = os.replace
+
+        def deny_replace(src, dst):
+            if Path(dst) == target:
+                raise PermissionError(errno.EACCES, "目标文件只读/被占用")
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(os, "replace", deny_replace)
+
+    write()  # 不得抛
+    assert target.read_bytes() == before, f"{kind}: 故障写破坏了原数据"
+    assert _no_tmp_leftovers(tmp_path) == []
+    _assert_ok_file(kind, tmp_path)
+
+
+@pytest.mark.parametrize("kind", WRITER_NAMES)
+def test_r3_fs_readonly_target_windows_semantics(tmp_path, monkeypatch, kind):
+    """保留原用例在 Windows 上的语义（chmod S_IREAD），仅在 Windows 跑。
+
+    Linux 上 rename(2) 无视文件权限位，该前提不成立 —— 见上一个用例的说明。
+    """
+    if os.name != "nt":
+        pytest.skip("POSIX 的 rename(2) 不检查目标文件权限位，该前提仅 Windows 成立")
+    write = _make_writer(kind, tmp_path)
+    target = _target_of(kind, tmp_path)
     write()
-    before = json.loads(target.read_text(encoding="utf-8"))
+    before = target.read_bytes()
     os.chmod(target, stat.S_IREAD)
     try:
-        write()  # 共同底线：任何平台都不得抛异常逃逸
+        write()
     finally:
-        os.chmod(target, stat.S_IWUSR | stat.S_IRUSR)
-    after = json.loads(target.read_text(encoding="utf-8"))
-    if os.name == "nt":
-        # Windows：只读目标让 replace 失败，原数据必须原样保留
-        assert after == before, "Windows 上只读目标的写失败路径破坏了原数据"
-    else:
-        # POSIX：写入正常生效（这不是缺陷，是文件系统语义）
-        assert isinstance(after, dict | list)
+        os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+    assert target.read_bytes() == before
     assert _no_tmp_leftovers(tmp_path) == []
     _assert_ok_file(kind, tmp_path)
 

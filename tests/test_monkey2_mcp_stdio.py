@@ -117,9 +117,9 @@ def _scenario(garbage: list[bytes], expect_alive: bool) -> None:
             s.send_raw(g)
         time.sleep(0.5)
         alive = s.ping_ok()
-        assert (
-            alive is expect_alive
-        ), f"垃圾灌入后会话活性 {alive}（预期 {expect_alive}），进程状态 {s.p.poll()}"
+        assert alive is expect_alive, (
+            f"垃圾灌入后会话活性 {alive}（预期 {expect_alive}），进程状态 {s.p.poll()}"
+        )
         assert s.p.poll() is None, "桥进程不应退出"
     finally:
         s.close()

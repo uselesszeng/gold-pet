@@ -319,9 +319,9 @@ class ControlServer(QThread):
         }
         path = control_info_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        # REVIEW5-03 同族：发现文件也走原子写。读者（cli / MCP 桥）不会在
-        # truncate → 写入的窗口里拿到半截 control.json（那会让在跑的桌宠被
-        # 误报「接入信息损坏」），写入中途失败也不会留下坏文件。
+        # R5-M-01 / REVIEW5-03 同族：发现文件也走原子写。读者（cli / MCP 桥）不会在
+        # truncate → 写入的窗口里拿到半截 control.json（那会让在跑的桌宠被误报
+        # 「接入信息损坏」），写入中途失败也不会留下坏文件。
         _atomic_write_text(path, json.dumps(info, ensure_ascii=False, indent=2))
 
     @staticmethod

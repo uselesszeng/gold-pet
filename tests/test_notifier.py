@@ -367,9 +367,9 @@ def test_extreme_step_zero_reports_every_new_high():
 
     for idx, price in enumerate([907.70, 907.96, 908.07]):
         q = make_quote(price=price, prev=900.0, high=price, low=896.33)
-        assert any(
-            a.kind == KIND_EXTREME for a in n.evaluate(q, "黄金", now=base + idx)
-        ), f"现价 {price} 应提醒"
+        assert any(a.kind == KIND_EXTREME for a in n.evaluate(q, "黄金", now=base + idx)), (
+            f"现价 {price} 应提醒"
+        )
 
 
 def test_extreme_watermark_resets_on_new_day():

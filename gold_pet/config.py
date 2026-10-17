@@ -317,11 +317,12 @@ class Config:
         ——quit_app 里的 save 抛 OSError 会让 QApplication.quit() 永不执行
         （托盘退出/关窗退不掉）。
 
-        REVIEW5-03：旧实现是**直写**（truncate → write）。写入中途失败（ENOSPC/
-        进程被杀）会在磁盘上留下**半截 JSON**，下次启动 `load()` 读不动 →
-        触发 REVIEW5-01 的整份归零 → 变成「一次写入失败 = 用户配置永久丢失」的
-        连锁（已实测复现半截文件）。改走与其余三个写入器同一套 `_atomic_write_text`
-        （tmp + os.replace）：读者要么看到旧内容要么看到完整新内容，绝无半截。
+        落盘必须**原子**（REVIEW5-03 / R5-M-01）：裸 write_text 是 truncate → write，
+        写入中途失败（ENOSPC / 进程被杀）会在磁盘上留下**半截 JSON**，下次启动
+        `load()` 读不动 → 触发 REVIEW5-01 的整份归零 → 变成「一次写入失败 = 用户配置
+        永久丢失」的连锁；并发的 CLI / 同步盘 / 杀软读到也会 JSONDecodeError。
+        这里改走与其余三个写入器同一套 `_atomic_write_text`（tmp + os.replace）：
+        读者要么看到旧内容要么看到完整新内容，绝无半截。
         """
         path = getattr(self, "_path", None) or settings_path()
         try:

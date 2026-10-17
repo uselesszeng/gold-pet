@@ -118,7 +118,6 @@ v0.8.1 提供**源码归档**：
    想彻底退出请用右键菜单 →「退出」。
 5. 右键鲸娘可打开菜单：刷新 / 切换单位 / 切换品种 / 提醒历史 / 设置 /
    创建桌面快捷方式。
-
 ## 功能
 
 | 功能 | 说明 |
@@ -134,10 +133,11 @@ v0.8.1 提供**源码归档**：
 | 🗣️ 互动台词 | 约 90 条台词池：行情反应、摸头害羞、关怀叮嘱，随机不重样（4 秒后恢复价格） |
 | 🐟 大肥鱼彩蛋 | 右键「叫她大肥鱼🐟」会戳中鲸娘的傲娇：连叫会从嘴硬反驳 → 生气甩尾 → 记仇别扭层层递进；摸摸头就能哄好（每次启动重新原谅） |
 | 🤖 AI 控制鲸娘 | 内置本地控制服务（仅 127.0.0.1 + 随机 token），AI 通过 MCP 工具让鲸娘说话、做动作、摸头、挪位置，对话时桌面真的会动（见下方「AI 控制鲸娘」章节） |
-| 🖱️ 交互 | 单击切换单位 · 双击刷新 · 拖动移动 · 右键菜单 |
+| 🖱️ 交互 | 单击摸头 · 长按撒娇 · 双击刷新 · 拖动移动 · 右键菜单 |
 | 📌 托盘常驻 | 关窗=藏到托盘；托盘菜单可刷新/切换/设置/退出 |
 | ⚙️ 设置 | 单位、刷新间隔、动作活跃度、提醒阈值、关怀提醒、不透明度、置顶、开机自启 |
-| 🔌 离线兜底 | 断网显示「离线」+ 上次价格，不崩溃 |
+| 🔌 离线兜底 | 断网显示「离线」+ 上次价格，不崩溃；非交易时段气泡标「休市」 |
+| 🛡️ 单实例 | 重复启动会提示「已经在运行了」，托盘里能找到它 |
 
 ## AI 控制鲸娘（MCP，v0.8 新增）
 
@@ -204,6 +204,13 @@ pip install -r requirements.txt
 python run.py
 ```
 
+先看看行情、不弹界面：
+
+```bat
+python tools/check_price.py
+python run.py --once
+```
+
 打包成单个 exe：
 
 ```bat
@@ -230,16 +237,18 @@ python run.py                                          # 3. 运行
 > 需要 **Python 3.11+**。Linux 若报 `Could not load the Qt platform plugin "xcb"`，
 > 是缺系统库 —— 具体包名见文档第四步的常见问题。
 
-
 ## 操作说明
 
 | 操作 | 效果 |
 |---|---|
-| 左键单击 | **摸摸头**：眯眼笑 + 飘爱心 + 台词 |
-| 左键长按（约 0.6 秒） | **撒娇**：眼神飘开 + 脸红 + 台词 |
+| 左键单击 | **摸摸头**：眯眼笑 + 台词 |
+| 左键长按（约 0.6 秒） | **撒娇**：眼神飘开 + 台词 |
 | 左键双击 | 立即刷新行情 |
 | 左键拖动 | 移动位置（自动记忆）；**贴到屏幕边缘会自动停住，不会被裁掉半边** |
-| 右键 | 菜单：刷新 / 切换单位 / 切换品种 / 摸摸头 / 撒娇 / 说句话 / 置顶 / 气泡 / 走势图 / 创建桌面快捷方式 / 提醒历史 / 设置 / 隐藏 / 退出 |
+| 右键 | 菜单：刷新 / 切换单位 / 切换品种 / 摸摸头 / 撒娇 / 说句话 / 置顶 / 气泡 / 走势图 / 创建桌面快捷方式 / 提醒历史 / 设置 / 关于 / 隐藏 / 退出 |
+| 托盘左键单击 | 显示 / 隐藏 |
+
+右键菜单与托盘菜单是同一套（托盘多一项「显示/隐藏」）；「隐藏到托盘」只在托盘可用时出现。
 
 > 拖动到屏幕任意边缘时，窗口会被自动夹在可视区域内——包括任务栏、
 > 以及 macOS 顶栏 / Linux 面板占用的区域。多显示器下可自由跨屏拖动。
@@ -253,27 +262,69 @@ python run.py                                          # 3. 运行
 | 铂金 | 由美元价换算 | `hf_XPT`（纽约铂金） |
 
 - 汇率：新浪财经 `fx_susdcny`
-- 换算：`元/克 = 美元/盎司 ÷ 31.1034768 × 汇率`
-
-均为免密钥公开接口；程序自带本地缓存，断网时显示上次价格。**行情仅供参考，不构成投资建议。**
+- 换算：`元/克 = 美元/盎司 ÷ 31.1034768 × 汇率`；缺哪个方向就用另一个方向换算，高低价一起换算
+- 均为免密钥公开接口；程序自带本地缓存，断网时显示上次价格
+- 休市判断：日盘 09:00–11:30、13:30–15:30，夜盘 20:00–次日 02:30，周末休市；按本机本地时间判断，非东八区会有偏差
+- **行情仅供参考，不构成投资建议**
 
 ## 目录结构
 
 ```
 gold-pet/
-├── docs/PRD.md          产品需求文档
-├── gold_pet/            源码（config / price / notifier / tray_icon / ui /
-│                        autostart / shortcut / paths / main）
-├── assets/pet/*.png     动画帧（由 tools/import_dsh_assets.py 从 GIF 导入）
-├── assets/icon.ico      应用图标
-├── tools/import_dsh_assets.py  外部 GIF 素材导入（解帧/缩放/画布居中）
-├── tools/gen_assets.py  旧版自绘素材生成脚本（备用，可一键回退旧形象）
-├── tools/diag_*.py      只读诊断脚本（尺寸 / 资源占用 / 边缘拖动）
-├── requirements.txt
-├── run.bat / run.py     Windows 开发运行
-├── run.sh               macOS / Linux 一键运行（自动建 venv 装依赖）
-└── build.bat            打包 Windows exe
+├── docs/PRD.md              产品需求文档（评审/产品/架构文档在同级子目录）
+├── gold_pet/
+│   ├── main.py              CLI 入口、日志、单实例锁、窗口装配
+│   ├── ui.py                桌宠窗口、托盘、设置面板
+│   ├── bubble.py            气泡 HTML 渲染（纯函数，无 Qt 依赖）
+│   ├── price.py             行情抓取 / 解析 / 换算 / 缓存 / 历史
+│   ├── config.py            配置读写与校验
+│   ├── paths.py             用户数据目录与资源目录
+│   ├── notifier.py          提醒规则与去重（涨跌 / 新高新低 / 到价）
+│   ├── care.py              关怀提醒调度（喝水 / 久坐 / 护眼）
+│   ├── tray_icon.py         托盘价格数字图标
+│   ├── control_server.py    AI 控制鲸娘本地服务（127.0.0.1 + token）
+│   ├── autostart.py         开机自启（Windows 注册表，其他系统空操作）
+│   └── shortcut.py          Windows 快捷方式创建
+├── assets/pet/*.png         动画帧（tools/import_dsh_assets.py 从 GIF 导入）
+├── assets/icon.ico|png      应用图标（assets/icons/ 归档各形象版本）
+├── tools/import_dsh_assets.py  外部 GIF 素材导入（解帧 / 缩放 / 画布居中）
+├── tools/gen_assets.py      旧版自绘素材生成脚本（备用，可一键回退旧形象）
+├── tools/diag_*.py          只读诊断脚本（尺寸 / 资源占用 / 边缘拖动 / 窗口）
+├── tools/check_price.py     命令行查行情（调试用）
+├── tools/pet_mcp_server.py  MCP 服务端（供 AI 客户端连接）
+├── tests/                   单元测试（含 monkey 混沌测试）
+├── mobile/flutter/          Android / 移动端骨架
+├── requirements.txt         运行时依赖
+├── requirements-dev.txt     开发与打包依赖
+├── run.bat / run.py         Windows 开发运行
+├── run.sh                   macOS / Linux 一键运行（自动建 venv 装依赖）
+├── build.bat / gold-pet.spec 打包 exe
+└── lint.bat                 一键质量检查
 ```
+
+## 数据与配置位置
+
+用户数据都在 `%APPDATA%\GoldPet\`（其他系统 `~/.goldpet/`），升级或重新打包不会丢：
+
+| 文件 | 内容 |
+|---|---|
+| `settings.json` | 配置，可直接手改后重启 |
+| `last_price.json` | 最后一次行情缓存（断网时回显） |
+| `history.json` | 各品种+单位的走势点（每个最多 120 点，同一分钟不重复记） |
+| `gold-pet.log` | 日志（滚动保留 2 份） |
+| `.gold-pet.lock` | 单实例锁 |
+
+## 命令行参数
+
+```bat
+python run.py --once                  :: 只拉一次行情并打印，不启动界面
+python run.py --metal silver --once   :: 指定品种（gold / silver / platinum）
+python run.py --unit usd_oz --once    :: 指定单位（cny_g / usd_oz）
+python run.py --log-level DEBUG       :: 日志级别
+python run.py --version               :: 版本号
+```
+
+打包后同样可用：`dist\黄金桌宠.exe --once`。
 
 ## 想改点东西？
 
@@ -282,8 +333,11 @@ gold-pet/
 | 鲸娘的样子（换成别的 GIF 素材） | `tools/import_dsh_assets.py` 的 `STATE_MAP`，改完重跑 |
 | 鲸娘的样子（代码自绘） | `tools/gen_assets.py`，改完重跑（v0.5.5 金色版，可随时切回） |
 | 应用/托盘图标的形象版本 | `tools/switch_icon.py v055` 或 `v060`（归档于 `assets/icons/`） |
-| 默认单位、刷新间隔 | `gold_pet/config.py` 的 `DEFAULTS` 或设置面板 |
-| 涨红跌绿换成涨绿跌红 | `gold_pet/ui.py` 的 `UP_COLOR` / `DOWN_COLOR` |
+| 动画帧数与播放速度 | `gold_pet/ui.py` 的 `STATES` |
+| 台词 | `gold_pet/ui.py` 的 `LINES` |
+| 气泡内容与配色 | `gold_pet/bubble.py`（纯函数，改完跑 `tests/test_bubble.py`） |
+| 默认单位、刷新间隔、可选项 | `gold_pet/config.py` 的 `DEFAULTS` / `INTERVAL_CHOICES`，或设置面板 |
+| 涨红跌绿换成涨绿跌红 | `gold_pet/bubble.py` 的 `UP_COLOR` / `DOWN_COLOR` |
 | 换数据源 | `gold_pet/price.py` 的 `SINA_URL` 与 `parse_snapshot` |
 | 托盘数字位数上限 | `gold_pet/tray_icon.py` 的 `MAX_DIGITS` |
 | 提醒类型与去重规则 | `gold_pet/notifier.py` 的 `_check_pct` / `_check_extreme` / `_check_target` |
@@ -338,29 +392,29 @@ flutter pub get && flutter run
 
 详见 [mobile/flutter/README.md](mobile/flutter/README.md)。
 
-## 仓库
-
-- 源码：https://cnb.cool/TJ-coding/gold-pet
-- 下载：https://cnb.cool/TJ-coding/gold-pet/-/releases
-
-## 测试
+## 开发与测试
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest tests -q
+
+python -m ruff check .                 # 静态检查
+python -m ruff format .                # 格式化
+python -m mypy                         # 类型检查（白名单见 pyproject.toml）
+python -m pytest tests -q              # 单元测试
+python -m pytest tests --cov=gold_pet --cov-report=term-missing   # 带覆盖率
+
+:: Windows 一键：lint.bat
 ```
 
-覆盖：行情解析（三个品种、单位换算、缩放）、缓存与损坏兜底、历史去重与上限、
-配置读写与素材完整性、提醒规则与勿扰时段、托盘数字图标渲染、
-UI 渲染 / 单位与品种切换 / 摸头撒娇 / 台词恢复 / 离线状态 / 失败退避。
+mypy 白名单：`price.py` / `config.py` / `paths.py` / `bubble.py`（见 `pyproject.toml`）。
 
-质量门禁（与 CI 一致，Windows 直接跑 `lint.bat`）：
+覆盖：行情解析（三个品种、单位换算、缩放、高低价换算）、缓存与损坏兜底、
+历史去重与上限、配置读写与坏值收敛、素材完整性、休市时段判断、气泡渲染、
+提醒规则与勿扰时段、托盘数字图标渲染、
+UI 渲染 / 单位与品种切换 / 摸头撒娇 / 台词恢复 / 离线状态 / 到价提醒 / 失败退避。
 
-```bash
-python -m ruff check .
-python -m mypy                 # 注意：用裸 mypy，files 白名单在 pyproject.toml
-python -m pytest tests --cov=gold_pet --cov-report=term-missing
-```
+CI（`.cnb.yml`）在 push / PR 时自动跑：lint → 类型检查 → 测试 + 覆盖率，
+覆盖率门禁 65%，配置在 `pyproject.toml` 的 `[tool.coverage.report] fail_under`。
 
 ## 调试与日志
 
@@ -371,7 +425,8 @@ python run.py --log-level DEBUG      # 调试日志
 打包后：dist\黄金桌宠.exe --once
 ```
 
-日志：`%APPDATA%\GoldPet\gold-pet.log`（滚动保留 2 份）；未捕获异常也会写入日志而不是弹窗崩溃。
+日志：`%APPDATA%\GoldPet\gold-pet.log`（滚动保留 2 份，单文件上限 256 KB）；
+未捕获异常也会写入日志而不是弹窗崩溃。
 
 ## 打包
 
@@ -384,7 +439,8 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
 
 ## 开源许可
 
-[MIT](LICENSE) —— 与主流小型开源桌面应用一致，可自由使用、修改、二次分发，保留版权声明即可。
+[MIT](LICENSE)（含附加条款）—— 可自由使用、修改、二次分发，保留版权声明即可；
+商用与素材授权相关说明见 [LICENSE](LICENSE) 与下方「素材致谢与许可」。
 
 ## 常见问题
 
@@ -398,8 +454,13 @@ build.bat          :: 等价于 pyinstaller --noconfirm --clean gold-pet.spec
   若仍在旧版遇到，下载最新版即可。
 - **关了窗口程序还在跑吗**：在的。关窗只是隐藏，鲸娘回到托盘继续盯金价；
   要彻底退出用右键菜单 →「退出」。
-- **重复启动**：只会有一个鲸娘，第二次启动会提示“已经在运行了”。
-- **没有托盘**：部分环境禁用托盘，此时关窗即退出，菜单里不会出现“隐藏到托盘”。
+- **重复启动**：只会有一个鲸娘，第二次启动会提示「已经在运行了」。
+- **没有托盘**：部分环境禁用托盘，此时关窗即退出，菜单里不会出现「隐藏到托盘」。
+- **一直显示「离线」**：接口依赖外网，检查网络与代理；断网期间显示的是上次价格与时间。
+- **提醒太吵 / 收不到**：设置里调提醒阈值（0 = 关闭）与「重复提醒防抖」；
+  系统通知需要在 Windows 通知设置里允许。
+- **气泡显示「休市」**：是非交易时段，价格不会动，属正常。
+- **设置改坏了**：配置会被收敛到合法范围（坏值回落默认值）；也可直接删掉 `settings.json` 重新开始。
 - **exe 被杀毒报毒**：PyInstaller 打包的常见误报，添加信任即可；根因是未做代码签名。
 - **mac/Linux 起不来**：见 [macOS / Linux 从源码运行](#macos--linux-从源码运行) 的依赖与排错表。
 
@@ -594,6 +655,16 @@ Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授�
 - **关于窗口**：版本、数据来源、免责声明、许可（右键菜单 → 关于）
 - 右键菜单与托盘菜单统一；历史只在联网成功时落盘
 
+## 更新记录
+
+- **v0.4**：到价提醒、休市标识、首次运行引导、关于窗口；右键菜单与托盘菜单统一；
+  历史只在联网成功时落盘
+- **v0.3**：摸头 / 撒娇互动、今日最高最低价与创新高/创新低提醒、Flutter 移动端骨架
+- **v0.2**：多品种（黄金/白银/铂金）、迷你走势图、互动台词
+- **v0.1**：桌宠窗口、帧动画、价格气泡、定时刷新、托盘、设置面板
+
+> v0.5 起的详细版本沿革见下方各 `## v0.x` 小节与 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 文档
 
 - [从源码运行（macOS / Linux 新手向）](docs/从源码运行.md)
@@ -603,6 +674,7 @@ Linux（amd64/arm64）；Windows / macOS 需自托管 Runner，且 macOS 受授�
 - [代码评审 Hy4-gold-pet-v0.3.0](docs/review/Hy4-gold-pet-v0.3.0-代码评审文档.md)
 - [产品优化方案 Hy4-gold-pet-v0.4.0](docs/product/Hy4-gold-pet-v0.4.0-产品优化方案文档.md)
 - [架构优化方案 Hy4-gold-pet-v0.4.0](docs/architecture/Hy4-gold-pet-v0.4.0-架构优化文档.md)
+- [移动端说明](mobile/flutter/README.md)
 
 ## 发版流程（维护者）
 
@@ -644,6 +716,10 @@ python tools/cnb_release_upload.py TJ-coding/gold-pet <release_id> \
 
 ## 开发规范
 
+- 提交信息用 `type: 简述`（feat / fix / docs / refactor / test / chore）；
+- 改行为请同步补/改 `tests/`，并跑 `lint.bat` 再提 PR；
+- 用户文案统一称「鲸娘」（v0.7.1 起）。
+
 ```bash
 pip install -r requirements-dev.txt
 
@@ -655,5 +731,7 @@ python -m pytest tests --cov=gold_pet --cov-report=term-missing
 # Windows 一键：lint.bat
 ```
 
-CI（.cnb.yml）在 push / PR 时自动跑：lint → 类型检查 → 测试 + 覆盖率。
-覆盖率门禁 65%，配置在 `pyproject.toml` 的 `[tool.coverage.report] fail_under`。
+## 仓库
+
+- 源码：https://cnb.cool/TJ-coding/gold-pet
+- 下载：https://cnb.cool/TJ-coding/gold-pet/-/releases

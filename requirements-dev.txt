@@ -2,6 +2,7 @@
 pytest>=8.0
 pytest-cov>=5.0
 # ruff 钉死版本：格式化结果随版本漂移，浮动版本会让「本地绿、CI 红」
+# （0.6.9 报 UP038、0.17 已移除该规则，且 formatter 的 assert 排版风格两版不同）
 ruff==0.17.1
 mypy>=1.10
 pyinstaller>=6.3

@@ -51,17 +51,18 @@ from gold_pet import price as price_mod
 from gold_pet.config import METAL_NAMES, UNIT_NAMES, Config
 from gold_pet.paths import alert_history_path, cache_path, control_info_path, history_path
 
+# ---- 控制协议常量（REVIEW5-04）----
+# 从 gold_pet.protocol「引用」而非「手抄一份」：该模块是 CLI 与桌宠服务端的
+# 唯一事实来源。原先是两处手工同步（靠注释约束），服务端改了而 cli 忘了改
+# 就会静默产生两端语义不一致（CLI 放行 600 字、服务端截断到 500）。
+# 不 import control_server 的原因不变：那个模块顶层拉 PySide6，而 CLI 要能在
+# 无 GUI 环境（纯命令行 / CI）运行。protocol 只含纯常量，零依赖。
+from gold_pet.protocol import ALERT_KINDS, MAX_SAY_CHARS, PLAYABLE_STATES
+
 EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATE = 3
 EXIT_RUNTIME = 4
-
-# ---- 与服务端同源常量（源：gold_pet/control_server.py）----
-# 不直接 import control_server 是为了保持 CLI 无 PySide6 依赖；
-# 服务端改动时必须同步这两处（均有测试锚定）。
-MAX_SAY_CHARS = 500  # 同源 control_server._MAX_SAY_CHARS（P2-01）
-PLAYABLE_STATES = ("idle", "up", "down", "pat", "shy")  # 同源 control_server.PLAYABLE_STATES
-ALERT_KINDS = ("pct", "target", "extreme")  # 同源 notifier.KIND_* 三类提醒
 
 _HTTP_TIMEOUT = 5.0
 

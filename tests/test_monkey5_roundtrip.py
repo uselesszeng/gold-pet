@@ -259,7 +259,12 @@ def test_r5_rt_pos_matrix():
 
 
 def test_r5_rt_bool_written_as_number_or_string(tmp_path):
-    """布尔项被手写成 0/1/"yes" 等：必须收敛为 bool 类型（不是 int/str）。"""
+    """布尔项被手写成 0/1/"yes" 等：必须收敛为 bool 类型（不是 int/str）。
+
+    口径以 REVIEW5-02 的 `_as_bool` 为准：bool 原样、int/float 按数值、
+    字符串认常见真/假写法（大小写与空白不敏感），**未知字符串与容器（list/dict）
+    一类回落该键默认值**——不再沿用 `bool()` 的 truthiness（那会让 "false" 变 True）。
+    """
     path = tmp_path / "settings.json"
     path.write_text(
         json.dumps(
@@ -276,11 +281,13 @@ def test_r5_rt_bool_written_as_number_or_string(tmp_path):
     )
     cfg = Config.load(path)
     _assert_domain(cfg)
-    assert cfg.get("show_bubble") is False
-    assert cfg.get("show_spark") is True
-    assert cfg.get("autostart") is True  # str 非空 -> True（既有口径）
-    assert cfg.get("tray_show_price") is False  # 空 list falsy
-    assert cfg.get("control_enabled") is True  # 非空 dict truthy
+    assert cfg.get("show_bubble") is False  # 数值 0 -> False
+    assert cfg.get("show_spark") is True  # 数值 1 -> True
+    assert cfg.get("autostart") is True  # "yes" 在白名单 -> True
+    assert cfg.get("dnd_enabled") is False  # "false" -> False（不再被反转）
+    # 容器不属于「真/假写法」，回落各键默认值（tray_show_price / control_enabled 默认均 True）
+    assert cfg.get("tray_show_price") is DEFAULTS["tray_show_price"]
+    assert cfg.get("control_enabled") is DEFAULTS["control_enabled"]
 
 
 # ------------------------------------------------------------------ 范围不变量（随机）

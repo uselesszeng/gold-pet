@@ -239,13 +239,16 @@ def _num(
     R2-M-01：float(10**400)（JSON 超长整数字面量）抛 OverflowError 而非 ValueError，
     必须一并接住，否则脏缓存会让 Snapshot.from_dict 炸穿 load_cache。
 
-    R5-04：入参声明为 object 是**有意的**（脏值来自被手改的 JSON），而 float() 的
-    类型存根只收 str/Buffer/SupportsFloat/SupportsIndex——在调用点局部收窄为 Any
-    表达「这里就是要吃任意东西，转换失败由 except 兜住」，不改任何运行期行为。
+    R5-R-01 / R5-04：入参声明为 object 是**有意的**（脏值来自被手改的 JSON），
+    而 float() 的类型存根只接受 str / Buffer / SupportsFloat / SupportsIndex，
+    CI 的 `mypy` 阶段因此报 1 个 error（`pyproject.toml` 的 `warn_unused_ignores = false`
+    正是为这类必要 ignore 留的位置）。这里在调用点局部收窄为 Any 并显式标注
+    `# type: ignore[arg-type]`，表达「就是要吃任意东西，转换失败由 except 兜住」，
+    既不动「入参是任意脏值」这一契约，也不改任何运行期行为。
     """
     raw: Any = value
     try:
-        result = float(raw)
+        result = float(raw)  # type: ignore[arg-type]
     except (TypeError, ValueError, OverflowError):
         return default
     if not math.isfinite(result):
@@ -407,6 +410,39 @@ def _atomic_write_text(path: Path, text: str) -> None:
         raise
 
 
+# R5-BUG-4：时间戳格式化边界。
+# time.localtime() 对超出平台 time_t 范围的输入抛 OverflowError（而非返回错误值），
+# 手改/损坏的状态文件里出现 `"at": 1e308` 就会让「提醒历史」窗口、气泡渲染、
+# spark_cutoff 全线崩。展示层统一走这个工具：任何异常一律回落占位符，
+# 与 cli._fmt_time（早已这么兜）同口径——展示层兜底，不改数据层语义。
+_FALLBACK_CLOCK = "?"
+_SAFE_TS_LOW = 0.0
+# 公元 3000 年（与 _num(updated_at, high=...) 既有口径一致），远超其上的都是坏数据
+_SAFE_TS_HIGH = 32503680000.0
+
+
+def safe_strftime(fmt: str, ts: object, fallback: str = _FALLBACK_CLOCK) -> str:
+    """安全的时间戳格式化：脏值/超范围一律返回 fallback，绝不抛异常。
+
+    入参 ts 可能来自手改的状态文件（字符串数字、None、1e308、-1e308、嵌套容器），
+    因此这里同时承担「转 float」与「量级夹取」两件事：
+      - 转换失败、非有限值、超出 [0, 3000 年] 的值 → fallback；
+      - 转换成功且合理 → 按 fmt 格式化。
+    注意不做静默归零（那会把 1e308 显示成 1970 年，比 "?" 更误导用户）。
+    """
+    try:
+        value = float(ts)  # type: ignore[arg-type]
+    except (TypeError, ValueError, OverflowError):
+        return fallback
+    if not math.isfinite(value) or not (_SAFE_TS_LOW <= value <= _SAFE_TS_HIGH):
+        return fallback
+    try:
+        return time.strftime(fmt, time.localtime(value))
+    except (OSError, OverflowError, ValueError):
+        # 极端平台 time_t 位宽（32 位）下即使夹取后仍可能越界，兜底不抛
+        return fallback
+
+
 def _valid_point(point: object) -> bool:
     """P2-03：序列点合法性——必须是 dict 且 t/p 均可转 float 且为有限值。
 
@@ -478,8 +514,15 @@ class HistoryStore:
             if not math.isfinite(price):
                 return series
             now = time.time()
-            # 同一分钟内不重复记录
-            if series and now - series[-1].get("t", 0) < 60:
+            # R5-BUG-1：series 刚由 load() 读出，点里的 t 可能是「数值字符串」
+            # （`_valid_point` 明确放行 "1700000000" 这种形态，因为下游渲染都要
+            # 转 float）。但这里直接拿原生值参与减法：`now - "1700000000"` 抛
+            # TypeError，异常从 UI 刷新槽 _update_spark 一路逃逸，击穿刷新链路
+            # （实测：手改 history.json 一个 t 为字符串，刷新即崩）。
+            # 用 safe float 收敛后再比较，坏值按 0 处理（等价于「上一分钟之外」，
+            # 走 append 分支，语义与 _valid_point 的既有容错一致）。
+            last_t = _num(series[-1].get("t") if series else None, 0.0) if series else 0.0
+            if series and now - last_t < 60:
                 series[-1] = {"t": now, "p": price}
             else:
                 series.append({"t": now, "p": price})

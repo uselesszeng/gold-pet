@@ -36,22 +36,18 @@ from PySide6.QtCore import QThread, Signal
 from . import __version__
 from .paths import control_info_path
 from .price import _atomic_write_text
+from .protocol import MAX_BODY_BYTES, MAX_SAY_CHARS, PLAYABLE_STATES
 
 logger = logging.getLogger("gold_pet")
 
-# /play 允许播放的状态白名单：只开放「表演型」动作，
-# loading/offline 是行情驱动的状态，不允许外部乱设。
-PLAYABLE_STATES = ("idle", "up", "down", "pat", "shy")
-
-# 请求体大小上限：控制指令都是小 JSON，64KB 绰绰有余（防误用/恶意大包）
-_MAX_BODY_BYTES = 64 * 1024
+# REVIEW5-04：PLAYABLE_STATES / MAX_SAY_CHARS / MAX_BODY_BYTES 已下沉到
+# gold_pet/protocol.py —— CLI 与本体共用同一对象，不再两处手抄。
+# 保留 `_` 前缀别名是为了兼容既有测试与内部引用，值即 protocol 里的定义。
+_MAX_BODY_BYTES = MAX_BODY_BYTES
+_MAX_SAY_CHARS = MAX_SAY_CHARS
 
 # 短路响应（401/404/413）前排空请求体的上限（M-09）
 _MAX_DRAIN_BYTES = 8 * 1024 * 1024
-
-# /say 自由发言的文本上限（P2-01）：超长文本会把气泡撑爆/变形，超出部分截断。
-# HTML 转义统一在渲染边界 bubble.render_line_html 做，这里只管限长。
-_MAX_SAY_CHARS = 500
 
 
 def _to_coord(value: Any) -> int | None:
@@ -61,7 +57,7 @@ def _to_coord(value: Any) -> int | None:
     在 handler 线程里未捕获会导致连接被直接断开、客户端收不到任何 JSON 响应，
     因此必须在转换前拒绝非有限值。bool 是 int 子类，同样拒绝（true 不是坐标）。
     """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     if isinstance(value, float) and not math.isfinite(value):
         return None
@@ -323,7 +319,9 @@ class ControlServer(QThread):
         }
         path = control_info_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        # R5-M-01：与 settings.json 同治——原子写，避免截断窗口被 CLI/MCP 桥读到
+        # R5-M-01 / REVIEW5-03 同族：发现文件也走原子写。读者（cli / MCP 桥）不会在
+        # truncate → 写入的窗口里拿到半截 control.json（那会让在跑的桌宠被误报
+        # 「接入信息损坏」），写入中途失败也不会留下坏文件。
         _atomic_write_text(path, json.dumps(info, ensure_ascii=False, indent=2))
 
     @staticmethod

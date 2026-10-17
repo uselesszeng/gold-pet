@@ -126,7 +126,18 @@ class Alert:
 
     @property
     def kind_name(self) -> str:
-        return KIND_NAMES.get(self.kind, self.kind)
+        """提醒类型的展示名（R5-BUG-2）。
+
+        `kind` 来自手改过的 alert_history.json，可能是 list/dict/set 这类
+        **不可哈希**值：`KIND_NAMES.get(kind, ...)` 会抛 TypeError
+        （unhashable type），而调用方是「提醒历史」窗口的列表填充——
+        坏文件会让窗口打开即崩。这里先要求 kind 可哈希（str 优先），
+        否则回落为固定占位文案；纯展示层收敛，不改数据语义。
+        """
+        try:
+            return KIND_NAMES.get(self.kind, str(self.kind))
+        except TypeError:  # 不可哈希的脏 kind
+            return "提醒"
 
 
 def in_quiet_hours(
@@ -228,10 +239,12 @@ class Notifier:
     def _roll_day(self, now: float) -> None:
         """跨日时清空当日水位：新的一天重新计「今日新高」。
 
-        R5-M-02：now 来自外部（注入时钟、脚本、被系统调成极端值的时钟），
-        time.localtime 对超出 time_t 范围的浮点抛 OSError（不是 ValueError），
-        不接住会从 evaluate() 一路逃逸、崩穿刷新链路。格式化失败时退回
-        「不跨日」语义（保留当前 _day、不清水位），宁可少重置一次也不炸。
+        R5-BUG-3 / R5-M-02：now 可能来自注入/损坏的时间源（脚本、被系统改到极端值的
+        时钟），time.localtime 对超出 time_t 范围的浮点抛 OSError / OverflowError
+        （不是 ValueError），不接住会从 evaluate() 一路逃逸、崩穿刷新链路。
+        格式化失败时退回「不跨日」语义（保留当前 _day、不动水位）——坏时间戳下
+        我们并不知道今天是哪天，宁可少重置一次，也不要把脏值当成「新的一天」而
+        重新武装「创新高/新低」提醒造成刷屏。
         """
         try:
             day = time.strftime("%Y-%m-%d", time.localtime(now))
@@ -482,8 +495,18 @@ def spark_cutoff(range_key: str, now: float | None = None) -> float | None:
     if range_key == "1h":
         return (now if now is not None else time.time()) - 3600
     if range_key == "today":
-        local = time.localtime(now if now is not None else time.time())
-        return time.mktime((local.tm_year, local.tm_mon, local.tm_mday, 0, 0, 0, 0, 0, -1))
+        # R5-BUG-3 同族：now 可能是注入的极端值（测试/损坏时间源），
+        # localtime 对超出平台 time_t 的输入抛 OverflowError。
+        # 取不到当天零点时回落「不限制」，走势图照常画（不因时间源异常空图）。
+        stamp = now if now is not None else time.time()
+        try:
+            local = time.localtime(float(stamp))
+        except (TypeError, ValueError, OverflowError, OSError):
+            return None
+        try:
+            return time.mktime((local.tm_year, local.tm_mon, local.tm_mday, 0, 0, 0, 0, 0, -1))
+        except (OverflowError, ValueError, OSError):
+            return None
     return None
 
 

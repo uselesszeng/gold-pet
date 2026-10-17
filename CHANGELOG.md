@@ -5,6 +5,80 @@
 
 ---
 
+## [0.8.1] - 2026-10-13
+
+**主题：稳定性与数据安全 —— 第五轮 Monkey + 代码评审（CodeBuddy）**
+
+背景：一轮「发版前摸底」，要求全面高强度 Monkey + 全量代码评审，并把仓库里积压的
+6 个缺陷单逐条复测闭环。本轮换的两个新角度是：
+①**校验层放行、使用层致命**的「形态鸿沟」（前四轮只查值是否合法）；
+②**用户会「损失」什么**（前四轮只看会不会崩，不看会不会静默丢数据）。
+
+### 修复
+
+- **P1 配置损坏被静默整份归零**（`config.py`）：`Config.load` 把「文件不存在 /
+  读取失败 / 内容损坏」三态挤进同一条 `except` 返回 `{}`，无告警无留档；随后一次
+  `save()` 用默认值覆写原文件 → 用户自定义项**永久丢失且无从追回**。
+  改为三态拆分：缺失静默走默认；读失败告警；内容损坏告警并把**原始字节**留档到
+  `<文件>.corrupt`（只保留最早现场，不覆盖）。
+- **P2 历史序列被「数值字符串」时间戳击穿刷新链**（`price.py`）：`_valid_point`
+  有意放行 `"1700000000"` 这类形态，`append` 却拿原生值参与减法 →
+  `TypeError` 从 `ui._update_spark` 逃逸，**整个刷新槽死掉**（价格不更新、走势图不画、
+  后续提醒全断）。改为先用 `_num` 收敛上一点时间戳再比较。
+- **P2 提醒历史窗口遇不可哈希 `kind` 打开即崩**（`notifier.py`）：手改
+  `alert_history.json` 里 `"kind": [1,2]` 让 `KIND_NAMES.get()` 抛
+  `TypeError: unhashable type`。`kind_name` 收敛为占位文案。
+- **P2 超平台 `time_t` 时间戳打崩渲染链**（`price.py` / `bubble.py` / `notifier.py` /
+  `ui.py`）：`1e308` 这类值是「有限 float」但超出平台 `time_t`，`time.localtime()`
+  抛 `OverflowError`（不是 `ValueError`，既有 `except` 全部接不住）。
+  新增 `price.safe_strftime()` 统一兜底（夹取到 `[0, 公元3000年]`，坏值显式回落 `?`
+  ——**不做静默归零**，归零会把 1e308 显示成 1970 年，比 `?` 更误导）。
+  覆盖气泡渲染、提醒历史、`spark_cutoff`、`_roll_day`、`evaluate` 五处。
+- **P2 配置布尔项语义反转**（`config.py`）：`bool(值)` 让 JSON 里手写的字符串
+  `"false"` / `"0"` 恒为 `True` —— 用户「关闭」的意图被静默反转（实测 4 个键全中招）。
+  新增 `_as_bool` 按语义收敛，**保留 int/bool 既有语义锚点**，未知字符串回落默认（不猜）。
+- **P2 配置写入非原子**（`config.py` / `control_server.py`）：这两个是四个写入器里
+  仅剩的直写，ENOSPC 会留下**半截 JSON**，正好触发上面的整份归零 →
+  「一次写入失败 = 配置永久丢失」。统一改走 `_atomic_write_text`。
+- **P2 CI 门禁失效**（`.cnb.yml` 相关）：`ruff format --check` 在改动前就有 38 个文件
+  不达标（**该门禁从未通过过**）、`mypy` 必红（`price.py:241`）、且 `ruff>=0.6`
+  未固定版本导致门禁结论随装包时刻漂移。修复后**四条门禁首次全绿**。
+- **P1 `requirements.txt` 引号导致 pip 解析失败**：第 4 行写成 `"mcp<2"`，pip 把引号
+  当成包名的一部分 → `Invalid requirement`，`install deps` 阶段直接失败，
+  `lint` / `type check` / `test` **全部被 skipped**。也就是说主干 CI
+  **从来没有真正验证过任何代码**。去掉引号，说明改写为注释行。
+
+### 变更
+
+- 新增 `gold_pet/protocol.py`：控制协议常量（`PLAYABLE_STATES` / `MAX_SAY_CHARS` /
+  `MAX_BODY_BYTES` / `ALERT_KINDS`）的**唯一事实来源**，CLI 与本体引用同一对象，
+  不再两处手抄靠注释同步。该模块零依赖，保住 CLI「无 GUI 依赖」的设计前提。
+- `requirements-dev.txt` 固定 `ruff==0.6.9`（附原因注释）。
+- 全仓 `ruff format` 纯格式重排（38 + 5 个文件），**单独一笔提交**；
+  逐文件 AST 比对确认**零逻辑变化**。
+
+### 工程
+
+- 新增 `tests/test_monkey5_hostile_state.py`（53 例）：敌对状态文件形态攻击面，
+  固定种子 `20261101`，与 R1~R4 的种子/语料均不重复。
+- 新增 `tests/test_review5_goldpet.py`（29 例）：配置装载语义完整性 + 门禁有效性，
+  固定种子 `20261102`。
+- 修正 `test_r3_fs_readonly_target` 的**平台假设错误**（原用例假定「`chmod S_IREAD`
+  后写入必失败」，在 POSIX 上不成立 —— `rename(2)` 只看目录权限），
+  这是本仓入场基线 2 例稳定红的真实根因。
+- 全量回归 **478 passed / 0 failed / 10 skipped**（入场基线 396 passed / 2 failed），
+  覆盖率 **81.38%**（门禁 65%）。
+- 反向验证：Monkey 段回退源码后 41/53 转红，评审段回退后 20/29 转红。
+
+### 已知遗留（未修，需决策）
+
+- 跨进程「读-改-写」`history.json` 丢更新（实测 6 进程 × 25 点只剩 44 点）：
+  原子写保证「不写坏」但不保证「不丢更新」，修它需文件锁（**新依赖，待授权**）。
+- `tests/test_monkey3_degraded.py` 的 `subprocess.run(..., text=True)` 缺 `encoding`
+  （R4 报告 MTX-01 已定案，属测试资产改动，未获授权）。
+
+---
+
 ## [0.8.0] - 2026-10-01
 
 **主题：AI 控制鲸娘 —— 让 AI 指挥桌宠做动作、说话**

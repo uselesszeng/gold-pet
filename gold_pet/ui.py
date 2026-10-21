@@ -394,7 +394,8 @@ class PetWindow(QWidget):
         self._sync_anim_timer()  # v0.7.2：安静档启动即定格，不启动帧循环
 
         # 关怀提醒（v0.7）：喝水 / 久坐 / 护眼，只走气泡
-        self.care = CareScheduler(self.cfg)
+        # P1 修复：必须用当前时钟初始化，否则排期以 0 为起点，首启半分钟内就误提醒
+        self.care = CareScheduler(self.cfg, self.care_now())
         self.care_timer = QTimer(self)
         self.care_timer.timeout.connect(self._care_tick)
         self.care_timer.start(30 * 1000)  # 每半分钟查一次到点没有
@@ -769,6 +770,11 @@ class PetWindow(QWidget):
         self._speak_timer.start(4000)
 
     # ------------------------------------------------------- 关怀提醒（v0.7）
+    @staticmethod
+    def care_now() -> float:
+        """关怀提醒统一时间源：单调时钟（系统改时间不影响计时）。"""
+        return CareScheduler.now()
+
     def _care_tick(self) -> None:
         """每半分钟查一次：到点的关怀提醒就让鲸娘说一句。
 
@@ -778,13 +784,16 @@ class PetWindow(QWidget):
         dnd = bool(self.cfg.get("dnd_enabled", False)) and in_quiet_hours(
             None, self.cfg.get("dnd_start", "23:00"), self.cfg.get("dnd_end", "08:00")
         )
-        kind = self.care.due(time.time(), dnd_active=dnd)
+        now = self.care_now()
+        # 时钟跳变兜底：排期整体跑到未来（时钟被回拨）时重排，避免长时间不出声
+        self.care.resync(now)
+        kind = self.care.due(now, dnd_active=dnd)
         if kind is None:
             return
         for other in CARE_KINDS:
             if other != kind:
-                self.care.defer(other, time.time())
-        self.care.mark(kind, time.time())
+                self.care.defer(other, now)
+        self.care.mark(kind, now)
         self.speak(kind)
         logging.getLogger("gold_pet").info("关怀提醒已播报: %s", kind)
 
@@ -956,7 +965,7 @@ class PetWindow(QWidget):
             self._apply_interval()
             self._apply_activity()  # v0.7：活跃度立即生效，不用重启
             self._apply_control_setting()  # v0.8：AI 控制开关立即启停
-            self.care.reset(time.time())  # v0.7：关怀提醒按新配置重排
+            self.care.reset(self.care_now())  # v0.7：关怀提醒按新配置重排
             self.bubble.setVisible(bool(self.cfg.get("show_bubble", True)))
             if before != {key: self.cfg.get(key) for key in RULE_CONFIG_KEYS}:
                 self.notifier.reset_state()

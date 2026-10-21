@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from gold_pet.care import CARE_KINDS, CareScheduler
 from gold_pet.config import Config
 
@@ -83,3 +85,44 @@ def test_all_kinds_have_lines_in_ui():
     for kind in CARE_KINDS:
         assert kind in LINES, f"{kind} 缺少台词组"
         assert len(LINES[kind]) >= 6, f"{kind} 台词太少（{len(LINES[kind])} 条）"
+
+
+# ------------------------------------------------------------------ 首启误提醒
+def test_default_init_uses_current_clock_not_zero():
+    """P1 回归：不传 now 时必须以当前时钟为起点，而不是 0。
+
+    首启时排期若从 0 起算，第一次 tick（半分钟）就会「到点」，
+    于是刚启动就冒出喝水提醒。
+    """
+    n = CareScheduler(make_cfg())
+    started = CareScheduler.now()
+    assert n._next, "喝水默认开启，排期不该为空"
+    for at in n._next.values():
+        assert at > started + 59 * 60 - 60, f"排期不在未来一个周期附近: {at - started}"
+    # 启动后 1 秒、半分钟、下一个周期前的任意 tick 都不该到点
+    for elapsed in (1, 30, 60, 59 * 60):
+        assert n.due(n.now() + elapsed) is None, f"启动 {elapsed}s 就误提醒了"
+
+
+def test_zero_now_still_respected_when_explicitly_passed():
+    """显式传 0 仍按 0 起算（纯逻辑可注入，已有用例依赖这个语义）。"""
+    n = CareScheduler(make_cfg(), now=0.0)
+    assert n._next["care_drink"] == 60 * 60
+
+
+def test_dirty_now_falls_back_to_clock():
+    """now 传脏值（NaN / 字符串）不得让排期变成 NaN，否则永远不会到点。"""
+    for bad in (float("nan"), float("inf"), "abc", None):
+        n = CareScheduler(make_cfg(), now=bad)  # type: ignore[arg-type]
+        for at in n._next.values():
+            assert math.isfinite(at), f"now={bad!r} 让排期变成 {at}"
+
+
+def test_resync_rearranges_after_clock_rollback():
+    """时钟被回拨（now 远小于最早排期）时 resync 重排；正常前进不动排期。"""
+    n = CareScheduler(make_cfg(), now=10_000.0)
+    before = dict(n._next)
+    assert n.resync(10_030.0) is False  # 正常前进：不动
+    assert n._next == before
+    assert n.resync(0.0) is True  # 大幅回拨：重排
+    assert all(at >= 60 * 60 for at in n._next.values())

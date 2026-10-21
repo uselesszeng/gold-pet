@@ -11,6 +11,9 @@
 
 from __future__ import annotations
 
+import math
+import time
+
 # kind -> (开关配置键, 间隔配置键, 默认间隔分钟)
 CARE_KINDS: dict[str, tuple[str, str, int]] = {
     "care_drink": ("care_drink_enabled", "care_drink_interval_min", 60),
@@ -25,17 +28,44 @@ _PRIORITY = list(CARE_KINDS)
 _DEFER_SEC = 90.0
 
 
-class CareScheduler:
-    """到点提醒调度：每分钟 tick 一次，返回该说话的 kind（或 None）。"""
+def _now() -> float:
+    """计时用的时间源：单调时钟，系统改时间/校时都不影响。"""
+    return time.monotonic()
 
-    def __init__(self, cfg, now: float = 0.0):
+
+def _as_ts(value: object, fallback: float = 0.0) -> float:
+    """把外部传入的时间点规整成有限浮点，非法值（NaN/None/字符串）退回 fallback。"""
+    try:
+        ts = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+    return ts if math.isfinite(ts) else fallback
+
+
+class CareScheduler:
+    """到点提醒调度：每分钟 tick 一次，返回该说话的 kind（或 None）。
+
+    时间约定：now 一律是「单调时钟秒数」（time.monotonic()），
+    调用方与调度器必须用同一个时间源；不传则取当前值。
+    此前默认 now=0.0：首启排期被算成 monotonic 起点 +1 小时，
+    启动半分钟后的第一次 tick 就「到点」，于是刚开程序就冒喝水提醒。
+    """
+
+    def __init__(self, cfg, now: float | None = None):
         self.cfg = cfg
         self._next: dict[str, float] = {}
-        self.reset(now)
+        # 传了时间就按传入的排（纯逻辑可注入），没传就取当前时钟
+        self.reset(self.now() if now is None else _as_ts(now))
+
+    @staticmethod
+    def now() -> float:
+        """调度器使用的当前时间（单调时钟秒数），供调用方对齐。"""
+        return _now()
 
     # ---------------------------------------------------------------- 对外
-    def reset(self, now: float) -> None:
+    def reset(self, now: float | None = None) -> None:
         """按当前配置重排所有提醒（启动 / 设置变更时调用）。"""
+        now = self.now() if now is None else _as_ts(now)
         self._next.clear()
         for kind in CARE_KINDS:
             if self._enabled(kind):
@@ -53,13 +83,29 @@ class CareScheduler:
 
     def mark(self, kind: str, now: float) -> None:
         """说完一句话后排下一次。"""
-        self._next[kind] = now + self._interval_sec(kind)
+        self._next[kind] = _as_ts(now, self.now()) + self._interval_sec(kind)
 
     def defer(self, kind: str, now: float) -> None:
         """同一时刻到期了多条时，把没轮到的往后推一小段，避免连发。"""
+        now = _as_ts(now, self.now())
         at = self._next.get(kind)
         if at is not None and now >= at:
             self._next[kind] = now + _DEFER_SEC
+
+    def resync(self, now: float | None = None) -> bool:
+        """时钟跳变兜底：now 早于任何一个周期起点（时钟被往回调过）时整体重排。
+
+        返回是否发生了重排。调度器走的是单调时钟，正常不会触发；
+        这里防的是调用方喂了非单调时间源（如 time.time()）或跨进程续跑。
+        """
+        now = self.now() if now is None else _as_ts(now)
+        if not self._next:
+            return False
+        earliest = min(at - self._interval_sec(kind) for kind, at in self._next.items())
+        if now >= earliest:
+            return False
+        self.reset(now)
+        return True
 
     # ---------------------------------------------------------------- 内部
     def _enabled(self, kind: str) -> bool:

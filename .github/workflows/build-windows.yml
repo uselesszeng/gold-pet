@@ -1,0 +1,41 @@
+name: build-windows
+
+# gold-pet 的 Windows 可执行文件只能在 Windows 环境用 PyInstaller 构建；
+# CNB 官方节点只有 Linux（见仓库 .cnb.yml 的说明），因此用 GitHub Actions windows-latest。
+#
+# 触发：
+# - 手动 workflow_dispatch
+# - push tag v*
+#
+# 前置：仓库需要镜像/托管在 GitHub（当前 CNB remote 不会触发本 workflow）。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: build exe
+        run: |
+          pyinstaller gold-pet.spec
+      - name: checksum
+        run: |
+          certutil -hashfile dist\GoldPet.exe SHA256 > dist\GoldPet.exe.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GoldPet-windows
+          path: |
+            dist/*.exe
+            dist/*.sha256

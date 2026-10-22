@@ -31,8 +31,11 @@ jobs:
         run: |
           pyinstaller gold-pet.spec
       - name: checksum
+        shell: pwsh
         run: |
-          certutil -hashfile dist\GoldPet.exe SHA256 > dist\GoldPet.exe.sha256
+          Get-ChildItem dist -Filter *.exe | ForEach-Object {
+            certutil -hashfile $_.FullName SHA256 > "$($_.FullName).sha256"
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: GoldPet-windows
